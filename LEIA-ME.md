@@ -34,7 +34,7 @@ set HERALD_PERFIL=2 && npx electron .
 ## Publicar
 
 1. **Instalador → GitHub Releases**: crie um repositório `herald` no GitHub, vá em *Releases → Draft a new release*, crie a tag `v1.0.0` e anexe o `release/Herald-Setup.exe`.
-2. **Link de download**: no `landing/index.html`, troque `SEU-USUARIO` pelo seu usuário do GitHub (linha do `LINK_DOWNLOAD`).
+2. **Link de download**: já aponta pra `github.com/pazoox/herald/releases/latest` (linha do `LINK_DOWNLOAD` no `landing/index.html`).
 3. **Site → Vercel**: em vercel.com, *Add New → Project*, importe o repositório e coloque **Root Directory = `landing`**. Sem build, é só HTML.
 
 ## Limitações conhecidas
