@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Herald — voice and screen for your crew</title>
+  <meta name="description" content="Free voice chat and 1080p 60fps screen sharing for gaming with friends.">
+  <meta property="og:title" content="Herald — voice and screen for your crew">
+  <meta property="og:description" content="Free, no ads. Low-latency voice and 1080p 60fps screen sharing.">
+  <meta property="og:image" content="marca/og.png">
+  <link rel="icon" href="marca/herald.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0a0f; --surface: #13111a; --panel: #1a1724; --panel-2: #231f2f; --line: #26222f;
+      --text: #f4f2f8; --text-2: #aaa5b8; --text-3: #716b82;
+      --accent: #b18cff; --accent-ink: #1a0f33; --accent-soft: #b18cff26; --lima: #d6f36a;
+      --g-blue: linear-gradient(165deg, #3c4c72 0%, #20263a 100%);
+      --g-violet: linear-gradient(165deg, #5b4a8c 0%, #221c35 100%);
+      --g-teal: linear-gradient(165deg, #2f5f63 0%, #18292c 100%);
+      --g-rose: linear-gradient(165deg, #6e3a48 0%, #2a1a20 100%);
+      --sans: "Manrope", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    .pixel { image-rendering: pixelated; }
+    .wrap { width: min(1160px, 100% - 32px); margin: 0 auto; }
+
+    /* Nav */
+    nav { position: sticky; top: 0; z-index: 10; background: #0a0a0bd9; backdrop-filter: blur(12px); }
+    nav .wrap { display: flex; align-items: center; gap: 24px; height: 72px; }
+    .marca { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -.3px; }
+    .marca img { width: 30px; }
+    nav .links { margin-left: auto; display: flex; gap: 26px; color: var(--text-2); font-weight: 600; font-size: 14.5px; }
+    nav .links a:hover { color: var(--text); }
+    .idioma { background: var(--panel); color: var(--text-2); border: 0; border-radius: 999px; padding: 7px 12px; font: 700 13px var(--sans); cursor: pointer; }
+    .idioma:hover { color: var(--text); }
+
+    .botao {
+      display: inline-flex; align-items: center; gap: 10px; background: var(--accent); color: var(--accent-ink);
+      font-weight: 800; padding: 15px 26px; border-radius: 999px; transition: filter .15s, transform .1s;
+    }
+    .botao:hover { filter: brightness(1.06); }
+    .botao:active { transform: scale(.98); }
+    .botao svg { width: 20px; height: 20px; }
+    .botao.pequeno { padding: 9px 18px; font-size: 14px; }
+
+    /* Hero */
+    .hero { text-align: center; padding: 72px 0 0; position: relative; }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 0 auto; height: 520px; pointer-events: none;
+      background: radial-gradient(640px 360px at 50% 0%, #b18cff1f, transparent 70%);
+    }
+    .hero .mascote { width: 190px; margin: -24px auto 18px; position: relative; }
+    .selo {
+      display: inline-flex; align-items: center; gap: 8px; background: var(--panel); border-radius: 999px;
+      padding: 6px 14px 6px 10px; font-size: 13px; font-weight: 700; color: var(--text-2); margin-bottom: 22px; position: relative;
+    }
+    .selo i { width: 8px; height: 8px; border-radius: 50%; background: var(--lima); box-shadow: 0 0 0 4px #d6f36a1f; }
+    h1 { font-size: clamp(40px, 7vw, 76px); line-height: 1.02; letter-spacing: -2.5px; margin: 0 auto 20px; max-width: 900px; font-weight: 800; position: relative; }
+    h1 em { font-style: normal; color: var(--accent); }
+    .hero p.sub { color: var(--text-2); font-size: clamp(17px, 2vw, 20px); max-width: 600px; margin: 0 auto 34px; }
+    .cta { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .nota { color: var(--text-3); font-size: 13px; font-weight: 600; }
+
+    .print {
+      margin: 64px auto 0; border-radius: 28px; overflow: hidden; background: var(--surface);
+      box-shadow: 0 40px 120px #000, 0 0 0 1px var(--line); width: 100%; height: auto;
+    }
+
+    /* Seções */
+    section { padding: 110px 0 0; }
+    .titulo-secao { text-align: center; margin-bottom: 48px; }
+    .titulo-secao small { color: var(--accent); font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; font-size: 12px; }
+    h2 { font-size: clamp(30px, 4.5vw, 46px); letter-spacing: -1.4px; line-height: 1.1; margin: 10px 0 0; font-weight: 800; }
+
+    .recursos { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+    .recurso { border-radius: 24px; padding: 28px; min-height: 230px; display: flex; flex-direction: column; }
+    .recurso .icone { width: 52px; height: 52px; border-radius: 16px; background: #ffffff14; display: grid; place-items: center; margin-bottom: auto; }
+    .recurso .icone svg { width: 26px; height: 26px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .recurso h3 { margin: 28px 0 6px; font-size: 21px; letter-spacing: -.4px; }
+    .recurso p { margin: 0; color: #ffffffb3; font-size: 15px; }
+    .recurso .grande { font-size: 40px; font-weight: 800; letter-spacing: -1.5px; line-height: 1; margin-top: 26px; }
+
+    .passos { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    .passo { background: var(--surface); border-radius: 24px; padding: 30px; }
+    .passo .n {
+      width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+      display: grid; place-items: center; font-weight: 800; margin-bottom: 22px;
+    }
+    .passo h3 { margin: 0 0 6px; font-size: 20px; }
+    .passo p { margin: 0; color: var(--text-2); font-size: 15px; }
+    .passo code { background: var(--bg); border-radius: 8px; padding: 2px 8px; font-size: 14px; color: var(--accent); }
+
+    .faq { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+    details { background: var(--surface); border-radius: 20px; padding: 0 24px; }
+    summary { cursor: pointer; list-style: none; padding: 20px 0; font-weight: 700; font-size: 17px; display: flex; justify-content: space-between; gap: 16px; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; color: var(--accent); font-size: 24px; line-height: 1; transition: transform .2s; }
+    details[open] summary::after { transform: rotate(45deg); }
+    details p { margin: 0 0 20px; color: var(--text-2); }
+    details b { color: var(--text); }
+
+    .final {
+      margin-top: 110px; background: var(--surface); border-radius: 32px; padding: 64px 24px; text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+    }
+    .final img { width: 130px; margin-top: -20px; }
+    .final h2 { margin: 0; }
+    .final p { margin: 0 0 8px; color: var(--text-2); }
+
+    footer { padding: 48px 0 40px; color: var(--text-3); font-size: 13.5px; }
+    footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+    @media (max-width: 720px) {
+      nav .links { display: none; }
+      nav .botao { margin-left: auto; }
+      .hero { padding-top: 48px; }
+      .print { border-radius: 18px; margin-top: 44px; }
+      section { padding-top: 80px; }
+      .recurso, .passo { padding: 24px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <!-- Troque este link quando o instalador estiver no GitHub Releases -->
+  <script>window.LINK_DOWNLOAD = 'https://github.com/SEU-USUARIO/herald/releases/latest/download/Herald-Setup.exe';</script>
+
+  <nav>
+    <div class="wrap">
+      <a href="#" class="marca"><img class="pixel" src="marca/herald.svg" alt="">Herald</a>
+      <div class="links">
+        <a href="#features" data-pt="Recursos">Features</a>
+        <a href="#how" data-pt="Como funciona">How it works</a>
+        <a href="#faq" data-pt="Dúvidas">FAQ</a>
+      </div>
+      <button class="idioma" id="idioma" type="button">PT</button>
+      <a class="botao pequeno baixar" href="#" data-pt="Baixar">Download</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="wrap">
+      <img class="mascote pixel" src="marca/herald-animado.svg" alt="Herald's raven mascot">
+      <div class="selo"><i></i><span data-pt="Grátis · sem anúncios · feito pra jogar">Free · no ads · made for gaming</span></div>
+      <h1 data-pt="Sua galera,<br>em <em>alto e bom som</em>.">Your crew,<br><em>loud and clear</em>.</h1>
+      <p class="sub" data-pt="Voz sem atraso, tela em 1080p 60fps e Nests pra galera se encontrar. Cria sua conta, chama os amigos, pronto.">Low-latency voice, 1080p 60fps screen sharing and Nests where your crew hangs out. Make an account, invite your friends, done.</p>
+      <div class="cta">
+        <a class="botao baixar" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          <span data-pt="Baixar pra Windows">Download for Windows</span>
+        </a>
+        <span class="nota" data-pt="Windows 10 e 11 · ~100 MB · versão 1.0">Windows 10 &amp; 11 · ~100 MB · version 1.0</span>
+      </div>
+      <img class="print" src="img/app.png?v=3" width="1320" height="820" alt="Herald open: four friends in a voice channel, one streaming a game, with chat on the side">
+    </div>
+  </header>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="titulo-secao">
+        <small data-pt="Recursos">Features</small>
+        <h2 data-pt="Só o que importa pra jogar junto">Everything you need to play together</h2>
+      </div>
+      <div class="recursos">
+        <div class="recurso" style="background:var(--g-violet)">
+          <div class="icone"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg></div>
+          <div class="grande">128 kbps</div>
+          <h3 data-pt="Voz sem atraso">Low-latency voice</h3>
+          <p data-pt="Sua voz vai direto do seu PC pro do seu amigo, sem passar por servidor. Menos caminho, menos atraso.">Your voice goes straight from your PC to your friend's, no server in the middle. Shorter path, less delay.</p>
+        </div>
+        <div class="recurso" style="background:var(--g-blue)">
+          <div class="icone"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+          <div class="grande">1080p 60</div>
+          <h3 data-pt="Tela lisinha">Smooth screen sharing</h3>
+          <p data-pt="Transmita o jogo em Full HD a 60fps, com o som junto. Usa a placa de vídeo pra não pesar no PC.">Stream your game in Full HD at 60fps, with sound. Uses your graphics card so your PC doesn't choke.</p>
+        </div>
+        <div class="recurso" style="background:var(--g-teal)">
+          <div class="icone"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V10l7-6 7 6v11"/><path d="M9 21v-6h6v6"/></svg></div>
+          <div class="grande">Nests</div>
+          <h3 data-pt="Um canto pra galera">A home for your crew</h3>
+          <p data-pt="Crie Nests com canais de texto e de voz. O chat fica salvo e quem tem o link de convite entra.">Create Nests with text and voice channels. Chat history sticks around, and anyone with the invite link can join.</p>
+        </div>
+        <div class="recurso" style="background:var(--g-rose)">
+          <div class="icone"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg></div>
+          <div class="grande">Ctrl+⇧+M</div>
+          <h3 data-pt="Muta de dentro do jogo">Mute from in-game</h3>
+          <p data-pt="Atalhos que funcionam com o jogo em tela cheia, sem precisar dar Alt+Tab.">Shortcuts that work with your game in fullscreen. No Alt+Tab needed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="titulo-secao">
+        <small data-pt="Como funciona">How it works</small>
+        <h2 data-pt="Três passos e a call tá rolando">Three steps and you're in</h2>
+      </div>
+      <div class="passos">
+        <div class="passo">
+          <div class="n">1</div>
+          <h3 data-pt="Baixe e instale">Download and install</h3>
+          <p data-pt="Um clique no instalador e o Herald aparece na sua área de trabalho.">One click on the installer and Herald shows up on your desktop.</p>
+        </div>
+        <div class="passo">
+          <div class="n">2</div>
+          <h3 data-pt="Crie sua conta e um Nest">Create an account and a Nest</h3>
+          <p data-pt="Só e-mail e senha. Seu Nest já vem com um canal de texto e dois de voz.">Just email and password. Your Nest comes with a text channel and two voice channels.</p>
+        </div>
+        <div class="passo">
+          <div class="n">3</div>
+          <h3 data-pt="Mande o convite">Send the invite</h3>
+          <p data-pt="Copie o link de convite e mande pra galera. Eles clicam e caem no seu Nest.">Copy the invite link and send it to your friends. They click it and land in your Nest.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <div class="titulo-secao">
+        <small data-pt="Dúvidas">FAQ</small>
+        <h2 data-pt="Perguntas da galera">Questions from the crew</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary data-pt="O Windows mostrou um aviso azul. É vírus?">Windows showed a blue warning. Is it a virus?</summary>
+          <p data-pt="Não. Esse aviso (SmartScreen) aparece com qualquer programa que não pagou por uma assinatura digital. Clique em <b>Mais informações</b> e depois em <b>Executar assim mesmo</b>.">No. That warning (SmartScreen) shows up for any app that hasn't paid for a code-signing certificate. Click <b>More info</b>, then <b>Run anyway</b>.</p>
+        </details>
+        <details>
+          <summary data-pt="É grátis mesmo?">Is it really free?</summary>
+          <p data-pt="Sim. Sem anúncios e sem plano pago. Voz e tela vão direto entre os PCs, então quase não custa nada manter.">Yes. No ads, no paid tier. Voice and screen go directly between PCs, so it costs almost nothing to run.</p>
+        </details>
+        <details>
+          <summary data-pt="Quanto de internet precisa pra transmitir a tela?">How much internet do I need to stream my screen?</summary>
+          <p data-pt="Em 1080p 60fps, uns <b>8 Mbps de upload pra cada amigo assistindo</b>. A tela só é enviada pra quem clica em Assistir. Se a sua internet for fraca, escolha 720p na hora de compartilhar.">At 1080p 60fps, about <b>8 Mbps of upload per friend watching</b>. Your screen is only sent to people who click Watch. On a weak connection, pick 720p when sharing.</p>
+        </details>
+        <details>
+          <summary data-pt="Um amigo fica preso em “conectando…”">A friend is stuck on “connecting…”</summary>
+          <p data-pt="Algumas operadoras (com CGNAT) bloqueiam a conexão direta entre dois PCs. Tente em outra rede, como o roteador do celular, pra confirmar.">Some internet providers (with CGNAT) block direct connections between PCs. Try another network, like your phone's hotspot, to confirm.</p>
+        </details>
+        <details>
+          <summary data-pt="Funciona no Mac, Linux ou celular?">Does it work on Mac, Linux or mobile?</summary>
+          <p data-pt="Por enquanto, só no Windows 10 e 11.">For now, only on Windows 10 and 11.</p>
+        </details>
+        <details>
+          <summary data-pt="Quantas pessoas cabem num canal de voz?">How many people fit in a voice channel?</summary>
+          <p data-pt="Fica melhor com até 6 a 8 pessoas, porque cada um conecta direto com cada outro.">It works best with up to 6–8 people, since everyone connects directly to everyone else.</p>
+        </details>
+      </div>
+
+      <div class="final">
+        <img class="pixel" src="marca/herald-animado.svg" alt="">
+        <h2 data-pt="Chama a galera.">Call your crew.</h2>
+        <p data-pt="Grátis, pra sempre, do jeito que tem que ser.">Free, forever, the way it should be.</p>
+        <a class="botao baixar" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          <span data-pt="Baixar pra Windows">Download for Windows</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <span data-pt="Herald · feito pra jogar com os amigos">Herald · made for playing with friends</span>
+      <span data-pt="O corvo manda um salve 🐦‍⬛">The raven says hi 🐦‍⬛</span>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.baixar').forEach((a) => (a.href = window.LINK_DOWNLOAD));
+
+    // Inglês por padrão; o botão troca pra português (e lembra a escolha)
+    const traduziveis = [...document.querySelectorAll('[data-pt]')];
+    traduziveis.forEach((el) => (el.dataset.en = el.innerHTML));
+    function aplicar(idioma) {
+      traduziveis.forEach((el) => (el.innerHTML = idioma === 'pt' ? el.dataset.pt : el.dataset.en));
+      document.documentElement.lang = idioma === 'pt' ? 'pt-BR' : 'en';
+      document.getElementById('idioma').textContent = idioma === 'pt' ? 'EN' : 'PT';
+      try { localStorage.setItem('herald-idioma', idioma); } catch {}
+    }
+    let idioma = 'en';
+    try { idioma = localStorage.getItem('herald-idioma') || 'en'; } catch {}
+    if (idioma === 'pt') aplicar('pt');
+    document.getElementById('idioma').onclick = () => {
+      idioma = idioma === 'pt' ? 'en' : 'pt';
+      aplicar(idioma);
+    };
+  </script>
+</body>
+</html>

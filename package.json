@@ -1,0 +1,58 @@
+{
+  "name": "herald",
+  "productName": "Herald",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Voz e compartilhamento de tela pra jogar com os amigos",
+  "author": "Herald",
+  "main": "src/main.js",
+  "scripts": {
+    "ui": "node scripts/copiar-audio.js && esbuild src/renderer/app.js --bundle --format=iife --target=chrome140 --outdir=src/renderer/dist --loader:.woff2=file --loader:.woff=file --asset-names=[name]",
+    "start": "npm run ui && electron .",
+    "mascote": "node scripts/mascote.js",
+    "dist": "npm run ui && electron-builder --win"
+  },
+  "dependencies": {
+    "@lofcz/deepfilternet-web": "^0.1.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "trystero": "^0.26.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2"
+  },
+  "allowScripts": {
+    "electron@45.0.0": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.28.2": true
+  },
+  "build": {
+    "appId": "app.herald",
+    "productName": "Herald",
+    "artifactName": "Herald-Setup.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/main.js",
+      "src/preload.js",
+      "src/renderer/index.html",
+      "src/renderer/dist/**",
+      "src/renderer/marca/**",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "Herald"
+    }
+  }
+}
