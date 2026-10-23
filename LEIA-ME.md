@@ -1,6 +1,9 @@
 # 🐦‍⬛ Herald
 
-App de Windows pra voz e compartilhamento de tela com os amigos. Grátis, sem conta, sem servidor.
+App de Windows pra voz e compartilhamento de tela com os amigos.
+
+- **Site:** https://herald-chat.vercel.app
+- **Download:** https://github.com/pazoox/herald/releases/latest
 
 - **Voz**: Opus 128 kbps, direto de PC pra PC.
 - **Tela**: até 1080p 60fps (H.264 pela placa de vídeo), só pra quem clica em **Assistir**.
