@@ -68,10 +68,15 @@
     .cta { display: flex; flex-direction: column; align-items: center; gap: 12px; }
     .nota { color: var(--text-3); font-size: 13px; font-weight: 600; }
 
+    /* Print do app dentro de uma janela do Windows 11 (botões no canto, como no app de verdade) */
     .print {
-      margin: 64px auto 0; border-radius: 28px; overflow: hidden; background: var(--surface);
-      box-shadow: 0 40px 120px #000, 0 0 0 1px var(--line); width: 100%; height: auto;
+      position: relative; margin: 64px auto 0; border-radius: 12px; overflow: hidden; background: #0b0a0f;
+      box-shadow: 0 40px 120px #000, 0 0 0 1px #ffffff1f; width: 100%;
     }
+    .print img { width: 100%; height: auto; }
+    .print .controles { position: absolute; top: 0; right: 0; height: 4.45%; display: flex; }
+    .print .controles span { width: 3.2vw; max-width: 46px; height: 100%; display: grid; place-items: center; }
+    .print .controles svg { width: 34%; height: auto; stroke: #aaa5b8; stroke-width: 1.1; fill: none; }
 
     /* Seções */
     section { padding: 110px 0 0; }
@@ -121,7 +126,7 @@
       nav .links { display: none; }
       nav .botao { margin-left: auto; }
       .hero { padding-top: 48px; }
-      .print { border-radius: 18px; margin-top: 44px; }
+      .print { border-radius: 8px; margin-top: 44px; }
       section { padding-top: 80px; }
       .recurso, .passo { padding: 24px; }
     }
@@ -148,7 +153,7 @@
   <header class="hero">
     <div class="wrap">
       <img class="mascote pixel" src="marca/herald-animado.svg" alt="Herald's raven mascot">
-      <div class="selo"><i></i><span data-pt="Grátis · sem anúncios · feito pra jogar">Free · no ads · made for gaming</span></div>
+      <div class="selo"><i></i><span data-pt="Grátis · sem anúncios">Free · no ads</span></div>
       <h1 data-pt="Sua galera,<br>em <em>alto e bom som</em>.">Your crew,<br><em>loud and clear</em>.</h1>
       <p class="sub" data-pt="Voz sem atraso, tela em 1080p 60fps e Nests pra galera se encontrar. Cria sua conta, chama os amigos, pronto.">Low-latency voice, 1080p 60fps screen sharing and Nests where your crew hangs out. Make an account, invite your friends, done.</p>
       <div class="cta">
@@ -158,7 +163,14 @@
         </a>
         <span class="nota" data-pt="Windows 10 e 11 · ~100 MB · versão 1.0">Windows 10 &amp; 11 · ~100 MB · version 1.0</span>
       </div>
-      <img class="print" src="img/app.png?v=3" width="1320" height="820" alt="Herald open: four friends in a voice channel, one streaming a game, with chat on the side">
+      <div class="print">
+        <img src="img/app.png?v=4" width="2880" height="1800" alt="Herald open: friends in a voice channel, one of them streaming a game">
+        <div class="controles" aria-hidden="true">
+          <span><svg viewBox="0 0 10 10"><path d="M0 5h10"/></svg></span>
+          <span><svg viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" rx="1.5"/></svg></span>
+          <span><svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0 0 10"/></svg></span>
+        </div>
+      </div>
     </div>
   </header>
 

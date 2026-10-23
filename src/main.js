@@ -61,10 +61,36 @@ function acharConvite(argv) {
   return m ? m[1].toLowerCase() : null;
 }
 
+// Tamanho/posição da janela: lembra o último; na primeira vez ocupa ~85% da tela
+const ARQUIVO_JANELA = () => path.join(app.getPath('userData'), 'janela.json');
+
+function tamanhoInicial() {
+  const { screen } = require('electron');
+  try {
+    const salvo = JSON.parse(fs.readFileSync(ARQUIVO_JANELA(), 'utf8'));
+    // só usa a posição salva se ela ainda cabe em algum monitor
+    const visivel = screen.getAllDisplays().some(({ workArea: a }) => salvo.x >= a.x - 50 && salvo.y >= a.y - 50 && salvo.x < a.x + a.width - 100 && salvo.y < a.y + a.height - 100);
+    if (visivel) return salvo;
+  } catch {}
+  const { workArea } = screen.getPrimaryDisplay();
+  const width = Math.min(1800, Math.round(workArea.width * 0.85));
+  const height = Math.min(1100, Math.round(workArea.height * 0.85));
+  return { width, height, x: workArea.x + Math.round((workArea.width - width) / 2), y: workArea.y + Math.round((workArea.height - height) / 2) };
+}
+
+function guardarTamanho() {
+  if (!janela || janela.isMinimized()) return;
+  const dados = { ...(janela.isMaximized() ? janela.getNormalBounds() : janela.getBounds()), maximizada: janela.isMaximized() };
+  try { fs.writeFileSync(ARQUIVO_JANELA(), JSON.stringify(dados)); } catch {}
+}
+
 function criarJanela() {
+  const inicial = tamanhoInicial();
   janela = new BrowserWindow({
-    width: 1320,
-    height: 820,
+    width: inicial.width,
+    height: inicial.height,
+    x: inicial.x,
+    y: inicial.y,
     minWidth: 960,
     minHeight: 620,
     show: false,
@@ -81,8 +107,20 @@ function criarJanela() {
     },
   });
 
-  janela.loadURL('app://herald/index.html');
-  janela.once('ready-to-show', () => janela.show());
+  // HERALD_DEMO=1 (ou =chat) abre com dados de mentira, pra prints
+  const demo = process.env.HERALD_DEMO;
+  janela.loadURL(demo ? `app://herald/index.html?demo=${encodeURIComponent(demo)}` : 'app://herald/index.html');
+  janela.once('ready-to-show', () => {
+    if (inicial.maximizada) janela.maximize();
+    janela.show();
+  });
+  let espera = null;
+  const guardarDepois = () => {
+    clearTimeout(espera);
+    espera = setTimeout(guardarTamanho, 400);
+  };
+  for (const evento of ['resize', 'move', 'maximize', 'unmaximize']) janela.on(evento, guardarDepois);
+  janela.on('close', guardarTamanho);
 
   // Links externos abrem no navegador, nunca dentro do app
   janela.webContents.setWindowOpenHandler(({ url }) => {

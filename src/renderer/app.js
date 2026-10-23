@@ -745,6 +745,7 @@ async function sairDaVoz() {
 }
 
 chamada.aoMudar((tipo, dados) => {
+  if (DEMO && (tipo === 'fala' || tipo === 'stats')) return;
   if (tipo === 'fala') {
     est.falando = dados;
     aplicarFala();
@@ -1152,4 +1153,126 @@ $$('dialog').forEach((d) =>
   }),
 );
 
-iniciar();
+// ================= Modo demonstração =================
+// HERALD_DEMO=1 abre o app com dados de mentira, sem conta nem rede.
+// Serve pra tirar prints da landing (não aparece pra quem usa o app).
+
+const DEMO = new URLSearchParams(location.search).has('demo');
+
+function montarDemo() {
+  const pessoas = [
+    ['u-eu', 'Pazi'], ['u-lu', 'Lu'], ['u-beto', 'Beto'], ['u-gui', 'Gui'],
+    ['u-nina', 'Nina'], ['u-caio', 'Caio'], ['u-theo', 'Theo'], ['u-bia', 'Bia'],
+  ];
+  for (const [id, nome] of pessoas) est.perfis.set(id, { id, display_name: nome, avatar_url: null });
+  est.eu = est.perfis.get('u-eu');
+
+  const nests = [
+    { id: 'n-crew', name: 'The Crew', owner_id: 'u-eu', invite_code: 'demo' },
+    { id: 'n-ranked', name: 'Ranked Grind', owner_id: 'u-beto', invite_code: 'demo' },
+    { id: 'n-movie', name: 'Movie Night', owner_id: 'u-nina', invite_code: 'demo' },
+  ];
+  est.nests = new Map(nests.map((n) => [n.id, n]));
+  est.membros = new Map([['n-crew', new Map(pessoas.map(([id]) => [id, id === 'u-eu' ? 'owner' : 'member']))]]);
+  est.canais = new Map([[
+    'n-crew',
+    [
+      { id: 'c-general', nest_id: 'n-crew', name: 'general', kind: 'text' },
+      { id: 'c-clips', nest_id: 'n-crew', name: 'clips', kind: 'text' },
+      { id: 'c-memes', nest_id: 'n-crew', name: 'memes', kind: 'text' },
+      { id: 'c-lobby', nest_id: 'n-crew', name: 'Lobby', kind: 'voice' },
+      { id: 'c-ranked', nest_id: 'n-crew', name: 'Ranked', kind: 'voice' },
+      { id: 'c-afk', nest_id: 'n-crew', name: 'AFK', kind: 'voice' },
+    ],
+  ]]);
+  const agora = Date.now();
+  const msgs = [
+    ['u-lu', 'anyone up for ranked tonight?', 38],
+    ['u-beto', 'after dinner, 9pm?', 36],
+    ['u-gui', "I'm in 🎮", 35],
+    ['u-nina', 'cant tonight, movie night with the fam', 30],
+    ['u-eu', "going live in Ranked, come watch the clutch attempts", 4],
+    ['u-beto', 'that last round was insane', 1],
+  ];
+  est.mensagens.set('c-general', msgs.map(([autor, texto, min], i) => ({ id: i + 1, channel_id: 'c-general', nest_id: 'n-crew', author_id: autor, content: texto, created_at: new Date(agora - min * 60000).toISOString() })));
+  est.mensagens.set('c-clips', []);
+  est.mensagens.set('c-memes', []);
+  est.naoLidas = new Set(['c-clips']);
+  est.presenca.set('n-crew', new Map([
+    ['u-lu', { voz: 'c-ranked', mudo: false }],
+    ['u-beto', { voz: 'c-ranked', aoVivo: true }],
+    ['u-gui', { voz: 'c-ranked', mudo: true }],
+    ['u-nina', { voz: 'c-lobby' }],
+    ['u-bia', { voz: null }],
+  ]));
+
+  // Chamada de mentira: eu no "Ranked", assistindo a tela do Beto
+  voz.canalId = 'c-ranked';
+  voz.conectado = true;
+  const tela = telaDemo();
+  voz.participantes.set('p-lu', { peerId: 'p-lu', userId: 'u-lu', ping: 18, estadoConexao: 'connected' });
+  voz.participantes.set('p-beto', { peerId: 'p-beto', userId: 'u-beto', aoVivo: true, assistindo: true, telaStream: tela, ping: 24, estadoConexao: 'connected' });
+  voz.participantes.set('p-gui', { peerId: 'p-gui', userId: 'u-gui', mudo: true, ping: 31, estadoConexao: 'connected' });
+  est.falando = new Set(['u-lu']);
+
+  mostrarTela('app');
+  est.nestAtual = 'n-crew';
+  est.textoPorNest.set('n-crew', 'c-general');
+  est.vozVista = 'c-ranked';
+  est.vista = new URLSearchParams(location.search).get('demo') === 'chat' ? 'texto' : 'voz';
+  render();
+}
+
+// Uma "partida" desenhada, só pra ter o que mostrar na tela compartilhada
+function telaDemo() {
+  const cv = document.createElement('canvas');
+  cv.width = 1920;
+  cv.height = 1080;
+  const g = cv.getContext('2d');
+  let t = 0;
+  const desenhar = () => {
+    t++;
+    const ceu = g.createLinearGradient(0, 0, 0, 1080);
+    ceu.addColorStop(0, '#1b2350');
+    ceu.addColorStop(0.6, '#e0805a');
+    ceu.addColorStop(1, '#f2c27a');
+    g.fillStyle = ceu;
+    g.fillRect(0, 0, 1920, 1080);
+    g.fillStyle = '#ffe3a3';
+    g.beginPath();
+    g.arc(1400, 640, 120, 0, 7);
+    g.fill();
+    const camada = (cor, base, amp, fase) => {
+      g.fillStyle = cor;
+      g.beginPath();
+      g.moveTo(0, 1080);
+      for (let i = 0; i <= 1920; i += 40) g.lineTo(i, base + Math.sin(i / 180 + fase + t / 200) * amp);
+      g.lineTo(1920, 1080);
+      g.fill();
+    };
+    camada('#5a3a5e', 700, 80, 0);
+    camada('#3a2442', 800, 60, 2);
+    camada('#1d1426', 900, 40, 4);
+    g.fillStyle = '#000a';
+    g.fillRect(60, 60, 440, 120);
+    g.fillStyle = '#d6f36a';
+    g.font = 'bold 44px sans-serif';
+    g.fillText('ROUND 7', 90, 120);
+    g.fillStyle = '#fff';
+    g.font = '32px sans-serif';
+    g.fillText('Team Raven  13 × 11', 90, 165);
+    g.fillRect(950, 530, 20, 4);
+    g.fillRect(958, 522, 4, 20);
+    requestAnimationFrame(desenhar);
+  };
+  desenhar();
+  return cv.captureStream(60);
+}
+
+if (DEMO) {
+  aplicarIcones();
+  mudarIdioma(idiomaAtual());
+  montarDemo();
+} else {
+  iniciar();
+}

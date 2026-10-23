@@ -1,7 +1,7 @@
 {
   "name": "herald",
   "productName": "Herald",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Voz e compartilhamento de tela pra jogar com os amigos",
   "author": "Herald",
@@ -12,12 +12,10 @@
     "mascote": "node scripts/mascote.js",
     "dist": "npm run ui && electron-builder --win"
   },
-  "dependencies": {
+  "devDependencies": {
     "@lofcz/deepfilternet-web": "^0.1.0",
     "@supabase/supabase-js": "^2.118.0",
-    "trystero": "^0.26.0"
-  },
-  "devDependencies": {
+    "trystero": "^0.26.0",
     "@fontsource-variable/manrope": "^5.3.0",
     "electron": "^45.0.0",
     "electron-builder": "^26.15.3",
@@ -49,10 +47,21 @@
       "icon": "build/icon.ico"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerSidebar": "build/instalador-lateral.bmp",
+      "uninstallerSidebar": "build/instalador-lateral.bmp",
+      "installerHeader": "build/instalador-topo.bmp",
+      "multiLanguageInstaller": true,
+      "installerLanguages": ["en_US", "pt_BR"],
       "createDesktopShortcut": true,
-      "shortcutName": "Herald"
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "Herald",
+      "uninstallDisplayName": "Herald"
     }
   }
 }
