@@ -122,10 +122,41 @@
       </section>
     </main>
 
-    <aside class="lateral">
-      <div class="lateral-titulo"><span data-i18n>Members</span> <span id="contagem-membros"></span></div>
-      <div id="membros" class="membros"></div>
-    </aside>
+    <aside class="lateral" id="lateral">
+        <!-- recolhido: trilha com anéis (estilo Rexie) -->
+        <div class="lateral-trilho">
+          <button class="anel" data-lateral="membros" id="anel-membros">
+            <svg viewBox="0 0 44 44"><circle class="anel-fundo" cx="22" cy="22" r="19"/><circle class="anel-progresso" cx="22" cy="22" r="19"/></svg>
+            <span class="anel-centro" data-icone="pessoa"></span>
+            <b class="anel-rotulo"></b>
+          </button>
+          <button class="anel oculto" data-lateral="radio" id="anel-radio">
+            <svg viewBox="0 0 44 44"><circle class="anel-fundo" cx="22" cy="22" r="19"/><circle class="anel-progresso" cx="22" cy="22" r="19"/></svg>
+            <span class="anel-centro"><span data-icone="radio"></span><span class="barrinhas"><i></i><i></i><i></i></span></span>
+            <b class="anel-rotulo"></b>
+          </button>
+          <button class="anel" data-lateral="sistema" id="anel-sistema">
+            <svg viewBox="0 0 44 44"><circle class="anel-fundo" cx="22" cy="22" r="19"/><circle class="anel-progresso" cx="22" cy="22" r="19"/></svg>
+            <span class="anel-centro" data-icone="atividade"></span>
+            <b class="anel-rotulo"></b>
+          </button>
+        </div>
+        <!-- aberto -->
+        <div class="lateral-aberto">
+          <div class="lateral-topo">
+            <div class="segmentado lateral-abas">
+              <button data-aba-lateral="membros"><span data-i18n>Members</span></button>
+              <button data-aba-lateral="radio" hidden><span data-i18n>Radio</span></button>
+              <button data-aba-lateral="sistema"><span data-i18n>System</span></button>
+            </div>
+            <button class="botao-icone pequeno" data-lateral="fechar" data-i18n-tip="Collapse panel"><span data-icone="painel"></span></button>
+          </div>
+          <div class="lateral-titulo-membros"><span data-i18n>Members</span> <span id="contagem-membros"></span></div>
+          <div id="membros" class="membros"></div>
+          <div id="painel-radio" class="painel-radio" hidden><p class="sistema-vazio" id="painel-radio-vazio"></p></div>
+          <div id="sistema" class="sistema" hidden></div>
+        </div>
+      </aside>
   </div>
 
   <!-- ============ Criar / entrar num Nest ============ -->
@@ -411,12 +442,26 @@
     </div>
   </dialog>
 
+  <!-- ============ Novidades (aparece quando o app abre já atualizado) ============ -->
+  <dialog id="dlg-novidades" class="modal novidades-modal">
+    <div class="novidades-topo">
+      <img src="marca/herald-animado.svg" alt="">
+      <div>
+        <small data-i18n>Herald was updated</small>
+        <h2 id="novidades-titulo"></h2>
+      </div>
+      <button class="botao-icone config-fechar" data-fechar data-icone="x"></button>
+    </div>
+    <div class="novidades-corpo config-pagina" id="novidades-corpo"></div>
+    <div class="novidades-rodape"><button class="botao-primario" data-fechar data-i18n>Got it</button></div>
+  </dialog>
+
   <!-- Rádio: player flutuante (fila compartilhada com a chamada) -->
   <section id="radio" class="radio" hidden>
     <header class="radio-topo" id="radio-topo">
       <span class="radio-marca"><span data-icone="radio"></span><b data-i18n>Radio</b></span>
       <button class="botao-icone pequeno" id="radio-recolher"></button>
-      <button class="botao-icone pequeno" id="radio-fechar" data-i18n-tip="Close the Radio for me"><span data-icone="x"></span></button>
+      <button class="botao-icone pequeno" id="radio-fechar"><span data-icone="x"></span></button>
     </header>
     <div class="radio-tela" id="radio-tela"></div>
     <div class="radio-agora">

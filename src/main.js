@@ -3,6 +3,7 @@
 
 const { app, BrowserWindow, session, desktopCapturer, ipcMain, globalShortcut, shell, Menu, protocol, net, safeStorage } = require('electron');
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 
@@ -280,6 +281,31 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('versao', () => app.getVersion());
+
+  // Painel "Sistema": quanto o Herald e o PC estão usando (CPU e memória)
+  let cpusAntes = os.cpus();
+  ipcMain.handle('metricas', () => {
+    const cpus = os.cpus();
+    let total = 0, ocioso = 0;
+    cpus.forEach((c, i) => {
+      const a = cpusAntes[i]?.times || c.times, b = c.times;
+      const t = b.user - a.user + (b.nice - a.nice) + (b.sys - a.sys) + (b.idle - a.idle) + (b.irq - a.irq);
+      total += t;
+      ocioso += b.idle - a.idle;
+    });
+    cpusAntes = cpus;
+    const processos = app.getAppMetrics();
+    return {
+      pcCpu: total ? 100 * (1 - ocioso / total) : 0,
+      // percentCPUUsage: 100 = um núcleo inteiro → divide pelos núcleos pra virar % do PC
+      heraldCpu: processos.reduce((s, p) => s + (p.cpu?.percentCPUUsage || 0), 0) / cpus.length,
+      heraldMem: processos.reduce((s, p) => s + (p.memory?.workingSetSize || 0), 0) / 1024, // MB
+      pcMemTotal: os.totalmem() / 2 ** 20,
+      pcMemLivre: os.freemem() / 2 ** 20,
+      nucleos: cpus.length,
+      cpuNome: cpus[0]?.model?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
 
   // Audio Lab: salva os WAVs de cada etapa em Documentos\Herald Audio Lab\<data-hora>
   if (LAB) {

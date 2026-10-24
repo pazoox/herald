@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('herald', {
   fontes: () => ipcRenderer.invoke('fontes'),
   escolherFonte: (id, audio) => ipcRenderer.invoke('escolher-fonte', id, audio),
   radioBuscar: (texto) => ipcRenderer.invoke('radio-buscar', texto),
+  metricas: () => ipcRenderer.invoke('metricas'),
   labSalvar: (arquivos) => ipcRenderer.invoke('lab-salvar', arquivos),
   labAbrirPasta: () => ipcRenderer.invoke('lab-abrir-pasta'),
   aoAtalho: (fn) => ipcRenderer.on('atalho', (_e, acao) => fn(acao)),

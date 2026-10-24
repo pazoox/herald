@@ -37,7 +37,7 @@ export function criarSeletor(el, { aoMudar }) {
     const atual = opcoes.find((o) => o.valor === valor) || opcoes[0];
     botao.innerHTML = `${atual ? item(atual) : ''}${icone('mais-opcoes')}`;
     lista.innerHTML = opcoes
-      .map((o, i) => `<li role="option" data-i="${i}" class="${o.valor === valor ? 'ligado' : ''} ${i === foco ? 'foco' : ''}" aria-selected="${o.valor === valor}">${item(o)}${o.valor === valor ? icone('certo') : ''}</li>`)
+      .map((o, i) => `<li role="option" data-i="${i}" class="${o.valor === valor ? 'ligado' : ''} ${i === foco ? 'foco' : ''} ${o.classe || ''}" aria-selected="${o.valor === valor}">${item(o)}${o.valor === valor ? icone('certo') : ''}</li>`)
       .join('');
   }
 
@@ -51,6 +51,9 @@ export function criarSeletor(el, { aoMudar }) {
     abrir() {
       lista.hidden = false;
       el.classList.add('aberto');
+      // sem espaço embaixo (fim da janela ou da área que rola)? abre pra cima
+      const area = el.closest('.config-pagina, .modal')?.getBoundingClientRect() || { bottom: innerHeight };
+      el.classList.toggle('acima', el.getBoundingClientRect().bottom + lista.offsetHeight + 12 > Math.min(area.bottom, innerHeight));
       foco = Math.max(0, opcoes.findIndex((o) => o.valor === valor));
       abertos.add(api);
       render();

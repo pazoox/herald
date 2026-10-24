@@ -10,6 +10,8 @@ import * as chamada from './voz.js';
 import { criarSeletor } from './seletor.js';
 import { criarRoleta } from './roleta.js';
 import { criarRadio } from './radio.js';
+import { novidadesEntre } from './novidades.js';
+import { criarPainelSistema } from './sistema.js';
 
 const { voz } = chamada;
 const $ = (s, el = document) => el.querySelector(s);
@@ -101,6 +103,25 @@ function etiquetaCargo(nestId, userId) {
   return cargo === 'member' ? '' : ` <span class="tag-dono tag-${cargo}">${esc(t(NOMES_CARGO[cargo]))}</span>`;
 }
 
+// Pop-up "o que tem de novo" (todas as versões entre a antiga e a atual)
+function abrirNovidades(antes, agora) {
+  const lista = novidadesEntre(antes, agora);
+  if (!lista.length) return aviso(t('Herald updated to {v}', { v: agora }));
+  const pt = idiomaAtual() === 'pt';
+  $('#novidades-titulo').textContent = t("What's new in {v}", { v: agora });
+  $('#novidades-corpo').innerHTML = lista.map((n, i) => {
+    const txt = pt ? n.pt : n.en;
+    const item = (s, tipo) => `<li class="${tipo}">${icone(tipo === 'nova' ? 'mais' : 'certo')}<span>${esc(s)}</span></li>`;
+    return `<section class="novidades-versao">
+      ${lista.length > 1 || i > 0 ? `<h3>${esc(n.versao)}</h3>` : ''}
+      ${txt.novas.length ? `<div class="novidades-rotulo">${esc(t('New'))}</div><ul>${txt.novas.map((s) => item(s, 'nova')).join('')}</ul>` : ''}
+      ${txt.correcoes.length ? `<div class="novidades-rotulo">${esc(t('Fixes & tips'))}</div><ul>${txt.correcoes.map((s) => item(s, 'correcao')).join('')}</ul>` : ''}
+    </section>`;
+  }).join('');
+  $('#dlg-novidades').showModal();
+  document.activeElement?.blur();
+}
+
 function aviso(texto) {
   const el = document.createElement('div');
   el.className = 'aviso';
@@ -187,7 +208,7 @@ async function iniciar() {
   // Avisa quando o app abre numa versão nova (depois de atualizar)
   window.herald?.versao?.().then((versao) => {
     const antes = ler('herald-versao');
-    if (antes && antes !== versao) setTimeout(() => aviso(t('Herald updated to {v}', { v: versao })), 1500);
+    if (antes && antes !== versao) setTimeout(() => abrirNovidades(antes, versao), 1200);
     guardar('herald-versao', versao);
   });
   window.herald?.aoAtualizar?.((d) => {
@@ -620,11 +641,81 @@ function renderMembros() {
     return `<div class="membro ${on ? '' : 'off'}" data-usuario="${id}">${avatarHtml(id)}<div class="membro-info"><span class="membro-nome">${esc(nomeDe(id))}${etiquetaCargo(est.nestAtual, id)}</span>${sub ? `<span class="membro-sub">${sub}</span>` : ''}</div></div>`;
   };
   $('#contagem-membros').textContent = lista.length ? `· ${lista.length}` : '';
+  est.contagemMembros = { online: online.length, total: lista.length };
   $('#membros').innerHTML =
     (online.length ? `<div class="membros-grupo">${esc(t('Online'))} — ${online.length}</div>${online.map((id) => item(id, true)).join('')}` : '') +
     (offline.length ? `<div class="membros-grupo">${esc(t('Offline'))} — ${offline.length}</div>${offline.map((id) => item(id, false)).join('')}` : '');
   aplicarFala();
 }
+
+// ================= Painel da direita (gaveta): Membros / Sistema =================
+// Recolhido por padrão: fica só uma trilha fina com os ícones. Lembra o que estava aberto.
+
+const painelSistema = criarPainelSistema({ el: $('#sistema'), voz, chamada, nomeDe, demo: new URLSearchParams(location.search).has('demo') });
+let abaLateral = ler('herald-lateral') || ''; // '' = recolhido
+
+function aplicarLateral() {
+  $('#app').classList.toggle('lateral-aberta', Boolean(abaLateral));
+  document.body.classList.toggle('lateral-aberta', Boolean(abaLateral)); // o Rádio flutuante sai da frente
+  $$('[data-aba-lateral]').forEach((b) => b.classList.toggle('ligado', b.dataset.abaLateral === abaLateral));
+  $('#membros').hidden = abaLateral !== 'membros';
+  $('.lateral-titulo-membros').hidden = abaLateral !== 'membros';
+  $('#sistema').hidden = abaLateral !== 'sistema';
+  $('#painel-radio').hidden = abaLateral !== 'radio';
+  if (abaLateral === 'sistema') painelSistema.redesenhar();
+  // aba Rádio: o player encaixa no painel (o pop-up some); fora da call mostra um aviso
+  const naCall = voz.conectado;
+  $('#painel-radio-vazio').textContent = t(naCall ? '' : 'Join a voice channel to listen to the Radio together.');
+  $('#painel-radio-vazio').hidden = naCall;
+  radio.encaixar(abaLateral === 'radio' && naCall);
+  guardar('herald-lateral', abaLateral);
+}
+$('#lateral').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-lateral], [data-aba-lateral]');
+  if (!b) return;
+  const acao = b.dataset.lateral || b.dataset.abaLateral;
+  if (acao === 'fechar') abaLateral = '';
+  else if (acao === 'abrir') abaLateral = ler('herald-lateral-ultima') || 'membros';
+  else abaLateral = acao;
+  if (abaLateral) guardar('herald-lateral-ultima', abaLateral);
+  aplicarLateral();
+});
+// Anéis da trilha (estilo Rexie): Membros = online/total, Rádio = progresso da música,
+// Sistema = CPU do PC (ou fps da sua transmissão, quando você está ao vivo)
+const CIRCUNFERENCIA = 2 * Math.PI * 19;
+function anel(el, fracao, cor, rotulo) {
+  const p = el.querySelector('.anel-progresso');
+  p.style.strokeDasharray = CIRCUNFERENCIA;
+  p.style.strokeDashoffset = CIRCUNFERENCIA * (1 - Math.max(0, Math.min(1, fracao || 0)));
+  el.dataset.cor = cor || '';
+  el.querySelector('.anel-rotulo').textContent = rotulo;
+}
+const tempoCurto = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function atualizarTrilho(sis) {
+  const m = est.contagemMembros || { online: 0, total: 0 };
+  anel($('#anel-membros'), m.total ? m.online / m.total : 0, 'lima', m.total ? `${m.online}/${m.total}` : '–');
+  const r = radio.info();
+  // o Rádio só aparece (anel e aba) quando está ligado — e entra com animação
+  const anelRadio = $('#anel-radio');
+  if (r.ligado === anelRadio.classList.contains('oculto')) {
+    anelRadio.classList.toggle('oculto', !r.ligado);
+    if (r.ligado) {
+      anelRadio.classList.remove('entrando');
+      void anelRadio.offsetWidth; // reinicia a animação
+      anelRadio.classList.add('entrando');
+    }
+    $('[data-aba-lateral="radio"]').hidden = !r.ligado;
+  }
+  anelRadio.classList.toggle('tocando', r.tocando);
+  anel($('#anel-radio'), r.progresso, r.ativo ? 'roxo' : '', r.ativo && r.restante != null ? `-${tempoCurto(r.restante)}` : '–');
+  $('#anel-radio').dataset.tip = r.titulo || t('Radio');
+  if (sis?.fps != null) anel($('#anel-sistema'), sis.fps / sis.alvoFps, sis.cor, `${sis.fps}fps`);
+  else anel($('#anel-sistema'), (sis?.cpu ?? 0) / 100, sis?.cor, sis?.cpu == null ? '–' : `${Math.round(sis.cpu)}%`);
+}
+setInterval(async () => {
+  atualizarTrilho(await painelSistema.atualizar(abaLateral === 'sistema'));
+}, 1000);
+queueMicrotask(aplicarLateral); // depois que o Rádio (mais embaixo) já existir
 
 // ================= Nest: criar / entrar / convidar / sair =================
 
@@ -867,6 +958,7 @@ chamada.aoMudar((tipo, dados) => {
   if (tipo === 'chegou') return radio.chegou(dados);
   if (tipo === 'eu') radio.atualizarSom();
   if (tipo === 'conexao' && !voz.conectado) radio.desligar();
+  if (tipo === 'conexao' && abaLateral === 'radio') aplicarLateral();
   if (tipo === 'eu' || tipo === 'conexao') anunciarPresenca();
   renderUsuario();
   renderCanais();
@@ -1368,6 +1460,7 @@ let nestEditando = null;
 function abrirPaginaNest(pagina) {
   $$('#menu-editar-nest [data-pagina-nest]').forEach((b) => b.classList.toggle('ligado', b.dataset.paginaNest === pagina));
   $$('#dlg-editar-nest .config-pagina').forEach((s) => (s.hidden = s.dataset.paginaNest !== pagina));
+  $$('#dlg-editar-nest .config-pagina:not([hidden])').forEach(atualizarFade);
 }
 $('#menu-editar-nest').addEventListener('click', (e) => {
   const b = e.target.closest('[data-pagina-nest]');
@@ -1401,27 +1494,31 @@ function renderMembrosNest() {
       const cargo = cargoDe(nest.id, id);
       const pode = possoGerenciar(nest.id, id);
       const seletor = pode && cargos.length
-        ? `<select class="select cargo-select" data-cargo-de="${id}">
-            ${cargos.map((r) => `<option value="${r}" ${r === cargo ? 'selected' : ''}>${esc(t(NOMES_CARGO[r]))}</option>`).join('')}
-            ${souDono ? `<option value="dono">${esc(t('Make owner…'))}</option>` : ''}
-          </select>`
+        ? `<div class="seletor cargo-seletor" data-cargo-de="${id}"></div>`
         : `<span class="cargo-fixo">${cargo === 'member' ? esc(t('Member')) : etiquetaCargo(nest.id, id)}</span>`;
       const chute = pode ? `<button class="botao-icone pequeno perigo" data-expulsar="${id}" data-tip="${esc(t('Kick from Nest'))}">${icone('porta')}</button>` : '<span class="botao-icone pequeno"></span>';
       return `<div class="membro-nest" data-usuario="${id}">${avatarHtml(id)}<span class="membro-nest-nome">${esc(nomeDe(id))}${id === est.eu.id ? ` <small>(${esc(t('you'))})</small>` : ''}</span>${seletor}${chute}</div>`;
     })
     .join('');
-}
-
-$('#lista-membros-nest').addEventListener('change', (e) => {
-  const s = e.target.closest('[data-cargo-de]');
-  if (!s) return;
-  const userId = s.dataset.cargoDe;
-  if (s.value === 'dono') {
-    s.value = cargoDe(nestEditando.id, userId);
-    return passarPosse(nestEditando.id, userId);
+  // dropdown do app (o <select> do Windows destoava)
+  for (const el of $$('#lista-membros-nest [data-cargo-de]')) {
+    const userId = el.dataset.cargoDe;
+    const s = criarSeletor(el, {
+      aoMudar: (valor) => {
+        if (valor === 'dono') {
+          s.definir(opcoesCargo, cargoDe(nest.id, userId));
+          return passarPosse(nest.id, userId);
+        }
+        mudarCargo(nest.id, userId, valor);
+      },
+    });
+    const opcoesCargo = [
+      ...cargos.map((r) => ({ valor: r, rotulo: t(NOMES_CARGO[r]) })),
+      ...(souDono ? [{ valor: 'dono', rotulo: t('Make owner…'), classe: 'perigo' }] : []),
+    ];
+    s.definir(opcoesCargo, cargoDe(nest.id, userId));
   }
-  mudarCargo(nestEditando.id, userId, s.value);
-});
+}
 $('#lista-membros-nest').addEventListener('click', (e) => {
   const b = e.target.closest('[data-expulsar]');
   if (b) expulsar(nestEditando.id, b.dataset.expulsar);
@@ -1671,10 +1768,40 @@ function atualizarOpcoesAudio() {
   $('#ganho-valor').textContent = `${a.ganho > 0 ? '+' : ''}${a.ganho} dB`;
 }
 
+// Fade nas bordas das páginas que rolam (Settings, Edit Nest): aparece aos poucos,
+// em cima depois de rolar e embaixo enquanto ainda tem conteúdo escondido
+const FADE = 48;
+function atualizarFade(el) {
+  if (!el.classList.contains('com-fade')) el = el.querySelector('.com-fade') || el;
+  const sobraBaixo = el.scrollHeight - el.clientHeight - el.scrollTop;
+  el.style.setProperty('--fade-topo', `${Math.min(FADE, el.scrollTop)}px`);
+  el.style.setProperty('--fade-base', `${Math.min(FADE, Math.max(0, sobraBaixo))}px`);
+}
+// Título ancorado: o título da página fica fixo e só o conteúdo embaixo dele rola (com o fade)
+$$('.config-pagina').forEach((pagina) => {
+  const titulo = pagina.querySelector(':scope > h3');
+  let rolagem = pagina;
+  if (titulo) {
+    rolagem = document.createElement('div');
+    rolagem.className = 'config-rolagem';
+    while (titulo.nextSibling) rolagem.appendChild(titulo.nextSibling);
+    pagina.appendChild(rolagem);
+    pagina.classList.add('com-titulo');
+  }
+  rolagem.classList.add('com-fade');
+});
+document.addEventListener('scroll', (e) => e.target.classList?.contains('com-fade') && atualizarFade(e.target), true);
+const observarFade = new ResizeObserver((itens) => itens.forEach((i) => atualizarFade(i.target)));
+$$('.com-fade').forEach((el) => {
+  observarFade.observe(el);
+  new MutationObserver(() => atualizarFade(el)).observe(el, { childList: true, subtree: true });
+});
+
 // Settings: menu à esquerda troca a página (Profile / Audio / Preferences)
 function abrirPaginaConfig(pagina) {
   $$('.config-menu [data-pagina]').forEach((b) => b.classList.toggle('ligado', b.dataset.pagina === pagina));
-  $$('.config-pagina').forEach((s) => (s.hidden = s.dataset.pagina !== pagina));
+  $$('#dlg-config .config-pagina').forEach((s) => (s.hidden = s.dataset.pagina !== pagina));
+  $$('#dlg-config .config-pagina:not([hidden])').forEach(atualizarFade);
 }
 $('.config-menu').addEventListener('click', (e) => {
   const b = e.target.closest('[data-pagina]');
@@ -1724,16 +1851,9 @@ $('#dlg-config').addEventListener('close', () => {
 
 // ================= Calibração da voz (Settings → Audio) =================
 
-const PERGUNTAS = [
-  'What game have you played the most this week? Tell us about it.',
-  'Tell us about the last good movie or series you watched.',
-  'If you could eat anything right now, what would it be? Why?',
-  'Describe your setup: what is on your desk right now?',
-  'What was the best thing that happened to you this week?',
-];
+
 let calibNova = null; // perfil recém-calculado no "Calibrar agora", esperando salvar
 let calibProgresso = null; // 0..1 enquanto grava
-let calibPergunta = '';
 
 // Toca o antes/depois juntos e alterna entre eles sem parar (A/B)
 const previaCalib = (() => {
@@ -1778,9 +1898,9 @@ function renderCalibracao() {
   const e = chamada.estadoCalibracao();
   // gravando o "Calibrar agora"
   if (calibProgresso !== null) {
-    el.innerHTML = `<p class="calib-pergunta">${esc(t(calibPergunta))}</p>
+    el.innerHTML = `<p class="calib-pergunta">${esc(t('Speak like you would in a call'))}</p>
       <div class="medidor"><div class="calib-barra" style="width:${Math.round(calibProgresso * 100)}%"></div></div>
-      <div class="calib-linha"><span class="texto-3">${esc(t('Talk normally, like in a call. It only counts while you speak.'))}</span><button class="link" data-calib="cancelar">${esc(t('Cancel'))}</button></div>`;
+      <div class="calib-linha"><span class="texto-3">${esc(t('It only counts while you speak.'))}</span><button class="link" data-calib="cancelar">${esc(t('Cancel'))}</button></div>`;
     return;
   }
   const perfil = calibNova || e.perfil;
@@ -1816,7 +1936,6 @@ $('#calib-cartao').addEventListener('click', async (ev) => {
   const acao = b.dataset.calib;
   if (acao === 'agora') {
     previaCalib.parar();
-    calibPergunta = PERGUNTAS[Math.floor(Math.random() * PERGUNTAS.length)];
     calibProgresso = 0;
     renderCalibracao();
     const perfil = await chamada.calibrarAgora(10, (p) => { calibProgresso = p; renderCalibracao(); });
@@ -2052,6 +2171,7 @@ function montarDemo() {
   est.vozVista = 'c-ranked';
   est.vista = new URLSearchParams(location.search).get('demo') === 'chat' ? 'texto' : 'voz';
   render();
+  if (new URLSearchParams(location.search).get('novidades')) setTimeout(() => abrirNovidades(new URLSearchParams(location.search).get('novidades'), '1.4.0'), 600);
   const yt = (id, titulo, autor, por) => ({ uid: id, tipo: 'youtube', id, titulo, autor, por, capa: `https://i.ytimg.com/vi/${id}/mqdefault.jpg` });
   radio.demo([
     yt('fJ9rUzIMcZQ', 'Queen – Bohemian Rhapsody (Official Video Remastered)', 'Queen Official', 'u-lu'),

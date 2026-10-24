@@ -131,6 +131,7 @@ export function criarRadio(ctx) {
   let player = null;
   let volume = Number(ler('herald-radio-vol') ?? 50);
   let buscando = false;
+  let noPainel = false; // encaixado na aba Rádio do painel da direita (sem pop-up)
 
   const posAgora = () => (estado.pausado ? estado.pos : estado.pos + (performance.now() - marco) / 1000);
   const pacote = () => ({ fila: estado.fila, pausado: estado.pausado, pos: posAgora(), v: estado.v });
@@ -216,11 +217,11 @@ export function criarRadio(ctx) {
     el.hidden = !aberto;
     if (!aberto) return;
     const atual = estado.fila[0];
-    el.classList.toggle('recolhido', recolhido);
+    el.classList.toggle('recolhido', recolhido && !noPainel);
+    el.classList.toggle('no-painel', noPainel);
     el.classList.toggle('vazio', !atual);
     el.classList.toggle('soundcloud', atual?.tipo === 'soundcloud');
     $('#radio-recolher').innerHTML = icone(recolhido ? 'recolher' : 'expandir');
-    $('#radio-recolher').dataset.tip = t(recolhido ? 'Expand' : 'Minimize');
     $('#radio-titulo').textContent = atual ? atual.titulo : t('Nothing playing');
     $('#radio-autor').textContent = atual
       ? [atual.autor, atual.por && t('added by {name}', { name: ctx.nomeDe(atual.por) })].filter(Boolean).join(' · ')
@@ -236,7 +237,8 @@ export function criarRadio(ctx) {
     const proximas = estado.fila.slice(1);
     $('#radio-qtd').textContent = proximas.length || '';
     $('#radio-ver-fila').classList.toggle('ligado', verFila);
-    $('#radio-fila').hidden = !verFila;
+    // na aba do painel a fila fica sempre aberta (interface dedicada)
+    $('#radio-fila').hidden = !(verFila || noPainel);
     $('#radio-fila').innerHTML = proximas.length
       ? `<div class="radio-fila-topo"><span>${esc(t('Up next'))}</span><button class="link" data-radio-limpar>${esc(t('Clear'))}</button></div>` +
         proximas.map((f, i) => `
@@ -355,7 +357,7 @@ export function criarRadio(ctx) {
     };
     if (salvo) requestAnimationFrame(() => !el.hidden && posicionar(salvo.x, salvo.y));
     topo.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('button')) return;
+      if (e.target.closest('button') || noPainel) return;
       const r = el.getBoundingClientRect();
       const dx = e.clientX - r.left;
       const dy = e.clientY - r.top;
@@ -382,6 +384,32 @@ export function criarRadio(ctx) {
       if (!estado.fila.length) $('#radio-busca').focus();
     },
     tocandoAlgo: () => estado.fila.length > 0,
+    // pro anel da trilha: progresso da música e se está tocando
+    info() {
+      const atual = estado.fila[0];
+      const dur = player?.duracao || 0;
+      return {
+        ativo: Boolean(atual),
+        ligado: aberto || Boolean(atual), // o player está aberto ou tem música rolando na call
+        tocando: Boolean(atual && !estado.pausado && aberto),
+        progresso: dur ? Math.min(1, posAgora() / dur) : 0,
+        restante: dur ? Math.max(0, dur - posAgora()) : null,
+        titulo: atual?.titulo || '',
+      };
+    },
+    // aba Rádio do painel: o player vai pra lá e o pop-up some
+    encaixar(sim) {
+      if (sim === noPainel) return;
+      noPainel = sim;
+      if (sim && !aberto) {
+        aberto = true;
+        fechadoPorMim = false;
+        aplicar();
+      } else if (!sim && !estado.fila.length) {
+        aberto = false; // não deixa um pop-up vazio aparecer ao sair da aba
+        aplicar();
+      } else render();
+    },
     // Estado que veio de outra pessoa da chamada
     receber({ estado: novo, de }) {
       if (!novo || typeof novo !== 'object' || !Array.isArray(novo.fila)) return;

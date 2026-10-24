@@ -580,6 +580,8 @@ export async function sair() {
   preferenciasTela.clear();
   voz.canalId = null;
   voz.conectado = false;
+  voz.rede = null;
+  voz.transmissao = null;
   for (const id of [...analisadores.keys()]) if (id !== 'eu') analisadores.delete(id);
   tocarSom('saiu');
   avisar('conexao');
@@ -866,11 +868,21 @@ export function tocarSom(nome) {
 // ================= Estatísticas (ping, fps, resolução) =================
 
 const bytesAntes = new Map();
+const redeAntes = new Map(); // id da estatística -> contadores do segundo anterior
 setInterval(async () => {
   if (!sala) return;
   const conexoes = sala.getPeers();
   const video = {}; // peerId -> texto
   let enviando = null;
+  // rede da call (somando todas as pessoas): kbps de subida/descida, perda de pacotes, jitter
+  const rede = { subida: 0, descida: 0, perdidos: 0, recebidos: 0, jitter: [], pings: [], viaApoio: 0 };
+  const assistindo = []; // telas que eu estou assistindo
+  let envioTela = 0; // Mbps saindo da minha tela (somando quem assiste)
+  const delta = (id, campo, valor) => {
+    const antes = redeAntes.get(id + campo);
+    redeAntes.set(id + campo, valor);
+    return antes == null ? 0 : Math.max(0, valor - antes);
+  };
   for (const [id, pc] of Object.entries(conexoes)) {
     const p = voz.participantes.get(id);
     if (!p) continue;
@@ -879,6 +891,9 @@ setInterval(async () => {
     stats.forEach((s) => {
       if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded' && s.currentRoundTripTime != null) {
         p.ping = Math.round(s.currentRoundTripTime * 1000);
+        rede.pings.push(p.ping);
+        rede.subida += (delta(s.id, 'env', s.bytesSent || 0) * 8) / 1000;
+        rede.descida += (delta(s.id, 'rec', s.bytesReceived || 0) * 8) / 1000;
         // essa conexão passa pelo servidor de apoio? (qualquer um dos lados em 'relay')
         const viaApoio = [s.localCandidateId, s.remoteCandidateId].some((c) => stats.get(c)?.candidateType === 'relay');
         if (viaApoio !== conexoesViaApoio.has(pc)) {
@@ -891,10 +906,50 @@ setInterval(async () => {
         bytesAntes.set(s.id, s.bytesReceived);
         const mbps = ((s.bytesReceived - antes) * 8) / 1e6;
         video[id] = `${s.frameWidth}×${s.frameHeight} · ${Math.round(s.framesPerSecond || 0)} fps · ${mbps.toFixed(1)} Mbps`;
+        assistindo.push({
+          userId: p.userId, largura: s.frameWidth, altura: s.frameHeight, fps: Math.round(s.framesPerSecond || 0), mbps,
+          travadas: delta(s.id, 'trav', s.freezeCount || 0), perdidos: delta(s.id, 'qperd', s.framesDropped || 0),
+        });
       }
-      if (s.type === 'outbound-rtp' && s.kind === 'video' && s.frameWidth && !enviando) enviando = s;
+      if (s.type === 'outbound-rtp' && s.kind === 'video' && s.frameWidth) {
+        if (!enviando) enviando = s;
+        envioTela += (delta(s.id, 'tela', s.bytesSent || 0) * 8) / 1e6;
+      }
+      if (s.type === 'inbound-rtp' && s.kind === 'audio') {
+        rede.perdidos += delta(s.id, 'perd', s.packetsLost || 0);
+        rede.recebidos += delta(s.id, 'receb', s.packetsReceived || 0);
+        if (s.jitter != null) rede.jitter.push(s.jitter * 1000);
+      }
     });
+    if (conexoesViaApoio.has(pc)) rede.viaApoio++;
   }
+  const media = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  voz.rede = {
+    subida: Math.round(rede.subida),
+    descida: Math.round(rede.descida),
+    perda: rede.recebidos + rede.perdidos ? (100 * rede.perdidos) / (rede.recebidos + rede.perdidos) : 0,
+    jitter: media(rede.jitter),
+    ping: media(rede.pings),
+    viaApoio: rede.viaApoio,
+    pessoas: Object.keys(conexoes).length,
+  };
+  // transmissão: o que mais pesa no app (pro painel Sistema)
+  voz.transmissao = {
+    enviando: enviando && {
+      largura: enviando.frameWidth,
+      altura: enviando.frameHeight,
+      fps: Math.round(enviando.framesPerSecond || 0),
+      alvoFps: telaQualidade?.fps || 60,
+      alvoAltura: telaQualidade?.h || 1080,
+      limite: enviando.qualityLimitationReason || 'none',
+      // codificando na placa de vídeo (leve) ou na CPU (pesado)?
+      gpu: enviando.powerEfficientEncoder ?? !/openh264|libvpx|libaom/i.test(enviando.encoderImplementation || ''),
+      codificador: enviando.encoderImplementation || '',
+      mbps: envioTela,
+      espectadores: voz.espectadores.size,
+    },
+    assistindo,
+  };
   avisar('stats', {
     video,
     enviando: enviando && {
