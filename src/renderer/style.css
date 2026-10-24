@@ -624,3 +624,7 @@ select option { background: var(--panel); }
 .radio-play.pausado svg.i { transform: none; }
 .radio-fila { overflow-x: hidden; }
 .radio-item { min-width: 0; }
+
+/* cartão de quem está no canal mas a conexão direta ainda não fechou */
+.cartao-pessoa.conectando { opacity: .5; animation: conectando 1.4s ease-in-out infinite; }
+@keyframes conectando { 50% { opacity: .3; } }

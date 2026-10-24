@@ -760,7 +760,7 @@ async function obterTurn() {
 async function entrarNaVoz(canal) {
   try {
     const turn = await obterTurn();
-    await chamada.entrar({ canalId: canal.id, chave: canal.voice_key, userId: est.eu.id, turn });
+    await chamada.entrar({ canalId: canal.id, chave: canal.voice_key, userId: est.eu.id, turn, sinal: sb });
   } catch (err) {
     console.error(err);
     aviso(t('Could not access the microphone.'));
@@ -842,8 +842,20 @@ function renderPalco() {
       if (p.assistindo && p.aoVivo) videos.push({ chave: `video-${p.peerId}`, nome: nomeDe(p.userId), stream: p.telaStream, peerId: p.peerId, userId: p.userId });
     }
     pessoas.push({ chave: 'pessoa-eu', userId: est.eu.id, mudo: voz.mudo, surdo: voz.surdo, aoVivo: voz.aoVivo, ehEu: true });
+    const conectados = new Set();
     for (const p of voz.participantes.values()) {
-      if (p.userId) pessoas.push({ chave: `pessoa-${p.peerId}`, userId: p.userId, peerId: p.peerId, mudo: p.mudo, surdo: p.surdo, aoVivo: p.aoVivo, assistindo: p.assistindo, ping: p.ping, conexao: p.estadoConexao });
+      if (!p.userId) continue;
+      // chave pelo usuário: o cartão "conectando…" vira o cartão conectado sem piscar
+      const chave = conectados.has(p.userId) ? `pessoa-${p.peerId}` : `pessoa-${p.userId}`;
+      conectados.add(p.userId);
+      pessoas.push({ chave, userId: p.userId, peerId: p.peerId, mudo: p.mudo, surdo: p.surdo, aoVivo: p.aoVivo, assistindo: p.assistindo, ping: p.ping, conexao: p.estadoConexao });
+    }
+    // Quem já está no canal (pela presença) mas a conexão direta ainda não fechou:
+    // aparece na hora, com "conectando…", em vez de surgir só depois
+    for (const [userId, p] of presencaDe(est.nestAtual)) {
+      if (p.voz === canal.id && userId !== est.eu.id && !conectados.has(userId)) {
+        pessoas.push({ chave: `pessoa-${userId}`, userId, mudo: p.mudo, surdo: p.surdo, aoVivo: p.aoVivo, conectando: true });
+      }
     }
   } else {
     // Fora da chamada: mostra quem está lá (pela presença)
@@ -883,8 +895,10 @@ function textoPing(d) {
 }
 
 function atualizarCartao(el, d) {
-  el.className = 'cartao-pessoa';
+  el.className = d.conectando ? 'cartao-pessoa conectando' : 'cartao-pessoa';
   el.dataset.fala = d.userId;
+  if (d.conectando) el.dataset.tip = t('connecting…');
+  else delete el.dataset.tip;
   const marcas = (!d.ehEu && chamada.mudoLocal(d.userId) ? icone('som-off') : '') || (d.surdo ? icone('fone-off') : d.mudo ? icone('mic-off') : '');
   const html = `${d.aoVivo ? `<span class="etiqueta-vivo">${esc(t('LIVE'))}</span>` : ''}
     ${avatarHtml(d.userId)}

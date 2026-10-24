@@ -1,9 +1,9 @@
 // Chamada de voz + tela de um canal de voz.
-// As pessoas se encontram pelo Trystero (relays Nostr) usando o id do canal e o
+// As pessoas se encontram pelo Trystero (via nosso Supabase Realtime) usando o id do canal e o
 // segredo do canal (voice_key, que só membros do Nest conseguem ler no banco).
 // Voz e tela vão direto de PC pra PC (WebRTC).
 
-import { joinRoom } from 'trystero/nostr';
+import { joinRoom } from './sinal.js';
 import { APP_ID } from './config.js';
 
 const BITRATE_VOZ = 128_000;
@@ -286,7 +286,7 @@ export function definirEsconderIp(ligado) {
 }
 export const rede = { viaApoio: false };
 
-export async function entrar({ canalId, chave, userId, turn = [] }) {
+export async function entrar({ canalId, chave, userId, turn = [], sinal }) {
   if (voz.canalId === canalId) return;
   if (sala) await sair();
   perfil = { userId };
@@ -297,7 +297,7 @@ export async function entrar({ canalId, chave, userId, turn = [] }) {
   voz.conectado = true;
   rede.viaApoio = esconderIp() && turn.length > 0;
   const rtcConfig = { iceServers: [...ICE, ...turn], iceTransportPolicy: rede.viaApoio ? 'relay' : 'all' };
-  sala = joinRoom({ appId: APP_ID, password: chave, rtcConfig, rtcPolyfill: Conexao }, canalId);
+  sala = joinRoom(sinal, { appId: APP_ID, password: chave, rtcConfig, rtcPolyfill: Conexao }, canalId);
 
   acoes.estado = sala.makeAction('estado');
   acoes.assistir = sala.makeAction('assistir');
