@@ -1,7 +1,7 @@
 {
   "name": "herald",
   "productName": "Herald",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Voz e compartilhamento de tela pra jogar com os amigos",
   "author": "Herald",
@@ -50,6 +50,7 @@
     },
     "nsis": {
       "oneClick": false,
+      "include": "build/installer.nsh",
       "perMachine": false,
       "allowToChangeInstallationDirectory": false,
       "installerIcon": "build/icon.ico",

@@ -157,6 +157,7 @@ const PT = {
   'resolution, fps and speed': 'resolução, fps e velocidade',
   'Lower quality': 'Qualidade menor',
   '720p 30fps — for weak internet': '720p 30fps — pra internet fraca',
+  'Herald updated to {v}': 'Herald atualizado pra {v}',
   'Cancel': 'Cancelar',
   'Confirm': 'Confirmar',
 };

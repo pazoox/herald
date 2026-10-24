@@ -47,7 +47,8 @@ function iniciarAtualizador() {
   autoUpdater.on('download-progress', (p) => avisar('baixando', { progresso: Math.round(p.percent) }));
   autoUpdater.on('update-downloaded', (i) => avisar('pronta', { versao: i.version }));
   autoUpdater.on('error', (e) => console.error('atualizador:', e?.message));
-  ipcMain.handle('instalar-atualizacao', () => autoUpdater.quitAndInstall(false, true));
+  // silencioso (sem as telas do instalador) e reabre o Herald no fim
+  ipcMain.handle('instalar-atualizacao', () => autoUpdater.quitAndInstall(true, true));
   const procurar = () => autoUpdater.checkForUpdates().catch(() => {});
   setTimeout(procurar, 5000);
   setInterval(procurar, 2 * 60 * 60 * 1000); // de 2 em 2 horas
@@ -222,6 +223,8 @@ app.whenReady().then(() => {
     delete dados[chave];
     gravarSessao(dados);
   });
+
+  ipcMain.handle('versao', () => app.getVersion());
 
   // A página pergunta se o app foi aberto por um convite
   ipcMain.handle('convite-pendente', () => {

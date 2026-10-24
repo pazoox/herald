@@ -159,6 +159,12 @@ async function iniciar() {
     if (est.eu) entrarComConvite(codigo);
     else conviteDepois = codigo;
   });
+  // Avisa quando o app abre numa versão nova (depois de atualizar)
+  window.herald?.versao?.().then((versao) => {
+    const antes = ler('herald-versao');
+    if (antes && antes !== versao) setTimeout(() => aviso(t('Herald updated to {v}', { v: versao })), 1500);
+    guardar('herald-versao', versao);
+  });
   window.herald?.aoAtualizar?.((d) => {
     if (d.estado !== 'pronta') return;
     const b = $('#btn-atualizar');
