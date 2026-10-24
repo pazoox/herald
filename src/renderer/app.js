@@ -8,6 +8,7 @@ import { icone, aplicarIcones } from './icones.js';
 import { t, traduzirPagina, mudarIdioma, idiomaAtual, IDIOMAS, quando, horaCurta } from './i18n.js';
 import * as chamada from './voz.js';
 import { criarSeletor } from './seletor.js';
+import { criarRoleta } from './roleta.js';
 
 const { voz } = chamada;
 const $ = (s, el = document) => el.querySelector(s);
@@ -781,6 +782,7 @@ chamada.aoMudar((tipo, dados) => {
     return;
   }
   if (tipo === 'stats') return atualizarStats(dados);
+  if (tipo === 'roleta') return roleta.receber(dados);
   if (tipo === 'eu' || tipo === 'conexao') anunciarPresenca();
   renderUsuario();
   renderCanais();
@@ -957,6 +959,43 @@ function atualizarStats({ video, enviando }) {
   // atualiza o ping dos cartões sem redesenhar tudo
   if (est.vista === 'voz') renderPalco();
 }
+
+// ================= Ferramentas do canal (Roleta; Rádio vem depois) =================
+
+function pessoasDaChamada() {
+  const ids = [est.eu.id, ...[...voz.participantes.values()].map((p) => p.userId).filter(Boolean)];
+  return [...new Set(ids)];
+}
+
+const roleta = criarRoleta({
+  eu: () => est.eu.id,
+  pessoas: pessoasDaChamada,
+  nomeDe,
+  avatarHtml: (id) => avatarHtml(id),
+  enviar: (giro) => chamada.enviarRoleta(giro),
+  audio: () => chamada.contextoAudio(),
+  mudo: () => voz.surdo,
+  aviso,
+});
+
+$('#btn-ferramentas').onclick = (e) => {
+  e.stopPropagation();
+  const menu = $('#menu-ferramentas');
+  const naChamada = voz.conectado && voz.canalId === est.vozVista;
+  menu.innerHTML = `
+    <button data-ferramenta="roleta" ${naChamada ? '' : 'disabled'}>${icone('roleta')}<span><b>${esc(t('Roulette'))}</b><small>${esc(t(naChamada ? 'Pick people at random' : 'Join the voice channel first'))}</small></span></button>
+    <button disabled>${icone('radio')}<span><b>${esc(t('Radio'))}</b><small>${esc(t('Coming soon'))}</small></span></button>`;
+  menu.hidden = !menu.hidden;
+};
+$('#menu-ferramentas').onclick = (e) => {
+  const b = e.target.closest('[data-ferramenta]');
+  if (!b || b.disabled) return;
+  $('#menu-ferramentas').hidden = true;
+  if (b.dataset.ferramenta === 'roleta') roleta.abrir();
+};
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.ferramentas')) $('#menu-ferramentas').hidden = true;
+});
 
 // ================= Transmissão em outra janela =================
 // A janela nova é uma página nossa (janela-tela.html); entregamos o vídeo direto pra ela.

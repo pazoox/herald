@@ -23,6 +23,10 @@ const CAMINHOS = {
   baixar: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
   janela: '<rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v11M13 11l8-8M16 3h5v5"/>',
   certo: '<path d="M20 6 9 17l-5-5"/>',
+  menos: '<path d="M5 12h14"/>',
+  ferramentas: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>',
+  roleta: '<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.4 6.4M12 12 5.6 18.4M12 12H3"/>',
+  radio: '<path d="M4.9 16.1a10 10 0 0 1 0-8.2M19.1 7.9a10 10 0 0 1 0 8.2M7.8 13.6a5 5 0 0 1 0-3.2M16.2 10.4a5 5 0 0 1 0 3.2"/><circle cx="12" cy="12" r="2"/>',
   porta:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 

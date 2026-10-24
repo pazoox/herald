@@ -101,7 +101,9 @@
         </div>
 
         <div id="vista-voz" class="vista" hidden>
-          <header class="vista-topo"><span data-icone="volume" class="vt-icone"></span><span id="voz-nome"></span></header>
+          <header class="vista-topo"><span data-icone="volume" class="vt-icone"></span><span id="voz-nome"></span>
+            <div class="ferramentas"><button id="btn-ferramentas" class="botao-icone" data-i18n-title="Tools" data-icone="ferramentas"></button><div id="menu-ferramentas" class="menu menu-ferramentas" hidden></div></div>
+          </header>
           <section id="palco" class="palco">
             <div id="palco-videos" class="palco-videos"></div>
             <div id="palco-pessoas" class="palco-pessoas"></div>
@@ -184,6 +186,33 @@
       <div class="botoes-linha">
         <button class="botao-secundario" data-fechar data-i18n>Cancel</button>
         <button id="btn-confirmar" class="botao-perigo" data-i18n>Confirm</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ============ Roleta ============ -->
+  <dialog id="dlg-roleta" class="modal roleta-modal">
+    <div class="modal-topo">
+      <h2 data-i18n>Roulette</h2>
+      <button class="botao-icone" data-fechar data-icone="x"></button>
+    </div>
+    <div class="roleta">
+      <div class="roleta-roda">
+        <canvas id="roleta-canvas" width="720" height="720"></canvas>
+        <div class="roleta-ponteiro"></div>
+        <div class="roleta-centro"><img src="marca/herald.svg" alt=""></div>
+      </div>
+      <div class="roleta-lado">
+        <div class="secao-titulo" data-i18n>Who's in</div>
+        <div id="roleta-pessoas" class="roleta-pessoas"></div>
+        <div class="secao-titulo" data-i18n>How many to pick</div>
+        <div class="contador">
+          <button id="roleta-menos" class="botao-icone" data-icone="menos"></button>
+          <b id="roleta-qtd">1</b>
+          <button id="roleta-mais" class="botao-icone" data-icone="mais"></button>
+        </div>
+        <button id="roleta-girar" class="botao-primario" data-i18n>Spin</button>
+        <div id="roleta-resultado" class="roleta-resultado"></div>
       </div>
     </div>
   </dialog>

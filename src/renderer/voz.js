@@ -154,6 +154,10 @@ class Conexao extends RTCPeerConnection {
 
 // ================= Microfone =================
 
+export function contextoAudio() {
+  return contexto();
+}
+
 function contexto() {
   if (!audioCtx) audioCtx = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 });
   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -297,6 +301,8 @@ export async function entrar({ canalId, chave, userId, turn = [] }) {
 
   acoes.estado = sala.makeAction('estado');
   acoes.assistir = sala.makeAction('assistir');
+  acoes.roleta = sala.makeAction('roleta');
+  acoes.roleta.onMessage = (dados, { peerId }) => avisar('roleta', { ...dados, de: voz.participantes.get(peerId)?.userId });
 
   sala.onPeerJoin = (id) => {
     voz.participantes.set(id, {
@@ -524,6 +530,11 @@ export function pararTela() {
   avisar('participantes');
 }
 
+// Roleta: manda o giro pra todo mundo da chamada (cada um anima igual a partir da semente)
+export function enviarRoleta(giro) {
+  acoes.roleta?.send(giro);
+}
+
 // Pede pro transmissor mandar uma versão mais leve só pra mim
 export function pedirQualidadeBaixa(peerId, baixa) {
   const p = voz.participantes.get(peerId);
@@ -636,6 +647,8 @@ const SONS = {
   mudo: [[440, 0]],
   desmudo: [[660, 0]],
   msg: [[880, 0]],
+  tique: [[1400, 0]],
+  vitoria: [[523, 0], [659, 0.1], [784, 0.2], [1046, 0.3]],
 };
 export function tocarSom(nome) {
   if (!audioCtx || voz.surdo) return;
