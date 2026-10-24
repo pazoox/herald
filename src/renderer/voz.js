@@ -40,6 +40,7 @@ function avisar(tipo, dados) {
 
 let sala = null;
 const preferenciasTela = new Map(); // peerId -> { baixa } (quem assiste minha tela)
+const conexoesViaApoio = new WeakSet(); // conexões que passam pelo TURN
 let acoes = {};
 let perfil = null; // { userId }
 let micTrack = null;
@@ -112,7 +113,9 @@ async function aplicarParametros(pc) {
       // quem pediu "qualidade menor" (internet fraca) recebe 720p30 mais leve
       const peerId = Object.entries(sala?.getPeers() || {}).find(([, c]) => c === pc)?.[0];
       const baixa = preferenciasTela.get(peerId)?.baixa;
-      enc.maxBitrate = baixa ? 2_500_000 : telaQualidade.bitrate;
+      // passando pelo servidor de apoio, tela mais leve (4 Mbps) pra poupar o limite da Cloudflare
+      const teto = conexoesViaApoio.has(pc) ? Math.min(4_000_000, telaQualidade.bitrate) : telaQualidade.bitrate;
+      enc.maxBitrate = baixa ? 2_500_000 : teto;
       enc.maxFramerate = baixa ? 30 : telaQualidade.fps;
       enc.scaleResolutionDownBy = baixa ? Math.max(1, telaQualidade.h / 720) : 1;
     } else {
@@ -270,7 +273,9 @@ export function microfoneAtual() {
 // turn: servidores de apoio (Cloudflare) vindos do Supabase. Com "esconder IP" ligado e
 // TURN disponível, tudo passa pelo apoio (iceTransportPolicy 'relay') e ninguém vê seu IP.
 export function esconderIp() {
-  return ler('herald-esconder-ip') !== '0';
+  // Desligado por padrão: o apoio custa banda (limite grátis da Cloudflare);
+  // sem isso ele só entra quando a conexão direta falha.
+  return ler('herald-esconder-ip') === '1';
 }
 export function definirEsconderIp(ligado) {
   guardar('herald-esconder-ip', ligado ? '1' : '0');
@@ -664,6 +669,12 @@ setInterval(async () => {
     stats.forEach((s) => {
       if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded' && s.currentRoundTripTime != null) {
         p.ping = Math.round(s.currentRoundTripTime * 1000);
+        // essa conexão passa pelo servidor de apoio? (qualquer um dos lados em 'relay')
+        const viaApoio = [s.localCandidateId, s.remoteCandidateId].some((c) => stats.get(c)?.candidateType === 'relay');
+        if (viaApoio !== conexoesViaApoio.has(pc)) {
+          viaApoio ? conexoesViaApoio.add(pc) : conexoesViaApoio.delete(pc);
+          if (voz.telaStream) aplicarParametros(pc);
+        }
       }
       if (s.type === 'inbound-rtp' && s.kind === 'video' && p.assistindo && s.frameWidth) {
         const antes = bytesAntes.get(s.id) ?? s.bytesReceived;

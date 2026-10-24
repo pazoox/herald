@@ -144,7 +144,7 @@ const PT = {
   'Update ready ({v}) — click to restart': 'Atualização pronta ({v}) — clique pra reiniciar',
   'Privacy': 'Privacidade',
   'Hide my IP': 'Esconder meu IP',
-  'your voice and screen go through a secure relay, so nobody in the call sees your IP. Adds a tiny delay.': 'sua voz e tela passam por um servidor de apoio seguro, e ninguém na chamada vê seu IP. Adiciona um atraso bem pequeno.',
+  'your voice and screen go through a secure relay, so nobody in the call sees your IP. Adds a tiny delay and lowers screen sharing to 4 Mbps.': 'sua voz e tela passam por um servidor de apoio seguro, e ninguém na chamada vê seu IP. Adiciona um atraso bem pequeno e deixa a tela em 4 Mbps.',
   'Protected: your IP is hidden in this call.': 'Protegido: seu IP está escondido nesta chamada.',
   'Relay unavailable right now — connecting directly.': 'Servidor de apoio indisponível agora — conectando direto.',
   'Applies when you join a voice channel.': 'Vale quando você entrar num canal de voz.',
