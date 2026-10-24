@@ -21,7 +21,7 @@ const CAMINHOS = {
   convite: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
   'som-off': '<path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/>',
   baixar: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
-  janela: '<rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v11M13 11l8-8M16 3h5v5"/>',
+  janela: '<path d="M14 3h7v7M21 3l-9 9M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>',
   certo: '<path d="M20 6 9 17l-5-5"/>',
   menos: '<path d="M5 12h14"/>',
   ferramentas: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>',
@@ -33,6 +33,8 @@ const CAMINHOS = {
   fila: '<path d="M3 6h13M3 12h13M3 18h9M17 15v6l4-3z"/>',
   recolher: '<path d="m18 15-6-6-6 6"/>',
   expandir: '<path d="m6 9 6 6 6-6"/>',
+  pessoa: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 16 0v1"/>',
+  lapis: '<path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
   porta:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 

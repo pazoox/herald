@@ -628,3 +628,62 @@ select option { background: var(--panel); }
 /* cartão de quem está no canal mas a conexão direta ainda não fechou */
 .cartao-pessoa.conectando { opacity: .5; animation: conectando 1.4s ease-in-out infinite; }
 @keyframes conectando { 50% { opacity: .3; } }
+
+/* menu do canal: ícone no lugar do avatar e um separador antes das opções do dono */
+.mp-canal { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--panel-2); color: var(--text-2); flex-shrink: 0; }
+.mp-canal svg.i { width: 18px; height: 18px; }
+.mp-linha { height: 1px; background: var(--line-strong); margin: 6px 4px; }
+
+/* ---------- Settings: menu à esquerda + páginas ---------- */
+.config-modal { width: min(860px, calc(100vw - 48px)); height: min(640px, calc(100vh - 80px)); }
+.config-modal[open] { flex-direction: row; }
+.config-menu { width: 220px; flex-shrink: 0; background: var(--panel); padding: 26px 14px 18px; display: flex; flex-direction: column; gap: 2px; }
+.config-menu h2 { margin: 0 12px 14px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-3); }
+.config-menu button { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; font-weight: 700; color: var(--text-2); text-align: left; transition: background .12s, color .12s; }
+.config-menu button:hover { background: var(--panel-2); color: var(--text); }
+.config-menu button.ligado { background: var(--accent-soft); color: var(--accent); }
+.config-menu [data-icone] { display: grid; place-items: center; }
+.config-menu svg.i { width: 18px; height: 18px; }
+.config-menu-fim { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+.config-menu .config-sair { color: var(--danger); }
+.config-menu .config-sair:hover { background: #f27a6a26; color: var(--danger); }
+.config-menu-fim small { padding: 0 12px; font-size: 11px; color: var(--text-3); font-weight: 600; }
+.config-corpo { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.config-fechar { position: absolute; top: 18px; right: 18px; z-index: 1; }
+.config-pagina { flex: 1; padding: 26px 36px 32px; }
+.config-pagina[hidden] { display: none; }
+.config-pagina h3 { margin: 0 0 6px; font-size: 22px; font-weight: 800; }
+.perfil-cartao { display: flex; align-items: flex-start; gap: 24px; background: var(--panel); border-radius: 20px; padding: 22px; }
+.perfil-campos { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.perfil-campos input:disabled { color: var(--text-3); }
+
+.mp-nest { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; font-size: 13px; overflow: hidden; flex-shrink: 0; }
+.mp-nest img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ---------- Cargos ---------- */
+.tag-dono.tag-owner { color: var(--accent-ink); background: var(--accent); }
+.tag-dono.tag-admin { color: var(--accent); background: var(--accent-soft); }
+.tag-dono.tag-moderator { color: var(--lima); background: #d6f36a1f; }
+.texto-3 { color: var(--text-3); font-size: 12px; font-weight: 600; }
+.nest-icone-grande { width: 72px; height: 72px; border-radius: 20px; display: grid; place-items: center; font-weight: 800; font-size: 24px; overflow: hidden; }
+.nest-icone-grande img { width: 100%; height: 100%; object-fit: cover; }
+.cargos-legenda { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--text-3); font-weight: 600; background: var(--panel); border-radius: 14px; padding: 12px 14px; }
+.cargos-legenda .tag-dono { margin: 0 6px 0 0; }
+.lista-membros-nest { display: flex; flex-direction: column; gap: 2px; }
+.membro-nest { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 12px; }
+.membro-nest:hover { background: var(--panel); }
+.membro-nest .avatar { width: 34px; height: 34px; font-size: 13px; }
+.membro-nest-nome { flex: 1; min-width: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.membro-nest-nome small { color: var(--text-3); font-weight: 600; }
+.cargo-select {
+  width: 150px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; font: 700 12.5px var(--sans);
+  color: var(--text); outline: none; cursor: pointer;
+}
+.cargo-select:focus { border-color: var(--accent); }
+.cargo-fixo { width: 150px; font-size: 12.5px; font-weight: 700; color: var(--text-3); }
+.cargo-fixo .tag-dono { margin: 0; font-size: 11px; padding: 2px 8px; }
+.mp-cargos { margin: 6px 0 2px; align-self: stretch; }
+.mp-cargos button { flex: 1; padding: 6px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.mp-cargos button.ligado { background: var(--accent); color: var(--accent-ink); }
+.menu-pessoa .segmentado.mp-cargos { margin-left: 0; }
+.campo-com-botao .botao-secundario { white-space: nowrap; }

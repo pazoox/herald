@@ -1,4 +1,5 @@
 -- Herald — banco de dados (Supabase / Postgres)
+-- Depois deste, rode o cargos.sql (Admin / Moderator / Member).
 -- Cole tudo no SQL Editor do Supabase e clique em "Run". Pode rodar de novo sem problema.
 --
 -- Tabelas:

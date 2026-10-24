@@ -167,7 +167,7 @@
   <!-- ============ Novo canal ============ -->
   <dialog id="dlg-canal" class="modal estreito">
     <div class="modal-topo">
-      <h2 data-i18n>New channel</h2>
+      <h2 id="canal-titulo">New channel</h2>
       <button class="botao-icone" data-fechar data-icone="x"></button>
     </div>
     <form id="form-canal" class="config">
@@ -175,7 +175,7 @@
         <span data-i18n>Channel name</span>
         <input id="canal-nome" maxlength="32" required autocomplete="off">
       </label>
-      <button class="botao-primario" data-i18n>Create</button>
+      <button class="botao-primario" id="canal-salvar">Create</button>
     </form>
   </dialog>
 
@@ -246,85 +246,164 @@
   </dialog>
 
   <!-- ============ Configurações ============ -->
-  <dialog id="dlg-config" class="modal estreito">
-    <div class="modal-topo">
+  <dialog id="dlg-config" class="modal config-modal">
+    <nav class="config-menu">
       <h2 data-i18n>Settings</h2>
-      <button class="botao-icone" data-fechar data-icone="x"></button>
-    </div>
-    <div class="config">
-      <div class="secao-titulo" data-i18n>Profile</div>
-      <div class="perfil-linha">
-        <label class="perfil-foto" id="perfil-foto">
-          <input type="file" id="perfil-arquivo" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
-          <div id="perfil-avatar" class="avatar grande"></div>
-          <span data-i18n>Change photo</span>
-        </label>
-        <div class="campo-com-botao" style="flex:1">
-          <input id="perfil-nome" maxlength="32">
-          <button id="btn-salvar-perfil" class="botao-secundario" data-i18n>Save</button>
+      <button data-pagina="perfil" class="ligado"><span data-icone="pessoa"></span><span data-i18n>Profile</span></button>
+      <button data-pagina="audio"><span data-icone="fone"></span><span data-i18n>Audio</span></button>
+      <button data-pagina="preferencias"><span data-icone="ajustes"></span><span data-i18n>Preferences</span></button>
+      <div class="config-menu-fim">
+        <button id="btn-sair-conta" class="config-sair"><span data-icone="porta"></span><span data-i18n>Sign out</span></button>
+        <small id="config-versao"></small>
+      </div>
+    </nav>
+    <div class="config-corpo">
+      <button class="botao-icone config-fechar" data-fechar data-icone="x"></button>
+
+      <!-- Perfil -->
+      <section class="config config-pagina" data-pagina="perfil">
+        <h3 data-i18n>Profile</h3>
+        <div class="perfil-cartao">
+          <label class="perfil-foto" id="perfil-foto">
+            <input type="file" id="perfil-arquivo" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+            <div id="perfil-avatar" class="avatar grande"></div>
+            <span data-i18n>Change photo</span>
+          </label>
+          <div class="perfil-campos">
+            <label class="campo">
+              <span data-i18n>Display name</span>
+              <div class="campo-com-botao">
+                <input id="perfil-nome" maxlength="32">
+                <button id="btn-salvar-perfil" class="botao-secundario" data-i18n>Save</button>
+              </div>
+            </label>
+            <label class="campo">
+              <span data-i18n>Email</span>
+              <input id="perfil-email" disabled>
+            </label>
+          </div>
         </div>
+      </section>
+
+      <!-- Áudio -->
+      <section class="config config-pagina" data-pagina="audio" hidden>
+        <h3 data-i18n>Audio</h3>
+        <div class="campo">
+          <span data-i18n>Microphone</span>
+          <div class="seletor" id="sel-mic"></div>
+        </div>
+        <div class="medidor-bloco">
+          <div class="medidor"><div id="medidor-barra"></div><div class="medidor-alvo"></div></div>
+          <span class="medidor-info" id="medidor-info"></span>
+        </div>
+        <button id="btn-testar-mic" class="botao-secundario" data-i18n>Test microphone (record 5 seconds)</button>
+        <div class="campo">
+          <span data-i18n>Output</span>
+          <div class="seletor" id="sel-saida"></div>
+        </div>
+
+        <div class="secao-titulo" data-i18n>Voice processing</div>
+        <label class="alternador">
+          <input type="checkbox" id="chk-ruido">
+          <span class="trilha"></span>
+          <span><span data-i18n>AI noise suppression</span> <small data-i18n>removes typing, clicks, fans and background noise</small></span>
+        </label>
+        <div class="segmentado" id="seg-forca">
+          <button data-forca="forte" data-i18n>Strong</button>
+          <button data-forca="natural" data-i18n>Natural</button>
+        </div>
+
+        <label class="alternador">
+          <input type="checkbox" id="chk-auto">
+          <span class="trilha"></span>
+          <span><span data-i18n>Automatic volume</span> <small data-i18n>keeps your voice at the right level, never clipping</small></span>
+        </label>
+        <div class="campo" id="bloco-ganho">
+          <span><span data-i18n>Input volume</span> <b id="ganho-valor"></b></span>
+          <input type="range" id="rng-ganho" min="-12" max="24" step="1">
+        </div>
+
+        <label class="alternador">
+          <input type="checkbox" id="chk-eco">
+          <span class="trilha"></span>
+          <span><span data-i18n>Echo cancellation</span> <small data-i18n>turn off if you use headphones — sounds more natural</small></span>
+        </label>
+      </section>
+
+      <!-- Preferências -->
+      <section class="config config-pagina" data-pagina="preferencias" hidden>
+        <h3 data-i18n>Preferences</h3>
+        <div class="campo">
+          <span data-i18n>Language</span>
+          <div class="seletor" id="sel-idioma"></div>
+        </div>
+
+        <div class="secao-titulo" data-i18n>Privacy</div>
+        <label class="alternador">
+          <input type="checkbox" id="chk-esconder-ip">
+          <span class="trilha"></span>
+          <span><span data-i18n>Hide my IP</span> <small data-i18n>your voice and screen go through a secure relay, so nobody in the call sees your IP. Adds a tiny delay and lowers screen sharing to 4 Mbps.</small></span>
+        </label>
+        <p class="aviso-rede" id="aviso-rede"></p>
+
+        <div class="secao-titulo" data-i18n>Shortcuts</div>
+        <div class="atalhos">
+          <div><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>M</kbd> <span data-i18n>mute / unmute</span></div>
+          <div><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>D</kbd> <span data-i18n>deafen</span></div>
+          <small data-i18n>Work even with your game open.</small>
+        </div>
+      </section>
+    </div>
+  </dialog>
+
+  <!-- ============ Edit Nest (Admin pra cima) ============ -->
+  <dialog id="dlg-editar-nest" class="modal config-modal">
+    <nav class="config-menu" id="menu-editar-nest">
+      <h2 id="editar-nest-titulo"></h2>
+      <button data-pagina-nest="geral" class="ligado"><span data-icone="ajustes"></span><span data-i18n>Overview</span></button>
+      <button data-pagina-nest="membros"><span data-icone="pessoa"></span><span data-i18n>Members</span></button>
+      <div class="config-menu-fim">
+        <button id="btn-apagar-nest" class="config-sair"><span data-icone="lixo"></span><span data-i18n>Delete Nest</span></button>
       </div>
+    </nav>
+    <div class="config-corpo">
+      <button class="botao-icone config-fechar" data-fechar data-icone="x"></button>
 
-      <div class="secao-titulo" data-i18n>Language</div>
-      <div class="seletor" id="sel-idioma"></div>
+      <section class="config config-pagina" data-pagina-nest="geral">
+        <h3 data-i18n>Overview</h3>
+        <div class="perfil-cartao">
+          <label class="perfil-foto" id="nest-icone-foto">
+            <input type="file" id="nest-icone-arquivo" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+            <span id="nest-icone" class="nest-icone-grande"></span>
+            <span data-i18n>Change icon</span>
+          </label>
+          <div class="perfil-campos">
+            <label class="campo">
+              <span data-i18n>Nest name</span>
+              <div class="campo-com-botao">
+                <input id="nest-nome-editar" maxlength="48">
+                <button id="btn-salvar-nest" class="botao-secundario" data-i18n>Save</button>
+              </div>
+            </label>
+          </div>
+        </div>
+        <div class="secao-titulo" data-i18n>Invite link</div>
+        <div class="campo-com-botao">
+          <input id="nest-convite-editar" readonly>
+          <button id="btn-copiar-convite-nest" class="botao-secundario" data-i18n>Copy</button>
+          <button id="btn-novo-convite-nest" class="botao-secundario" data-i18n>New link</button>
+        </div>
+        <small class="texto-3" data-i18n>Anyone with the link can join. A new link makes the old one stop working.</small>
+      </section>
 
-      <div class="secao-titulo" data-i18n>Voice</div>
-      <div class="campo">
-        <span data-i18n>Microphone</span>
-        <div class="seletor" id="sel-mic"></div>
-      </div>
-      <div class="medidor-bloco">
-        <div class="medidor"><div id="medidor-barra"></div><div class="medidor-alvo"></div></div>
-        <span class="medidor-info" id="medidor-info"></span>
-      </div>
-      <button id="btn-testar-mic" class="botao-secundario" data-i18n>Test microphone (record 5 seconds)</button>
-      <div class="campo">
-        <span data-i18n>Output</span>
-        <div class="seletor" id="sel-saida"></div>
-      </div>
-
-      <label class="alternador">
-        <input type="checkbox" id="chk-ruido">
-        <span class="trilha"></span>
-        <span><span data-i18n>AI noise suppression</span> <small data-i18n>removes typing, clicks, fans and background noise</small></span>
-      </label>
-      <div class="segmentado" id="seg-forca">
-        <button data-forca="forte" data-i18n>Strong</button>
-        <button data-forca="natural" data-i18n>Natural</button>
-      </div>
-
-      <label class="alternador">
-        <input type="checkbox" id="chk-auto">
-        <span class="trilha"></span>
-        <span><span data-i18n>Automatic volume</span> <small data-i18n>keeps your voice at the right level, never clipping</small></span>
-      </label>
-      <div class="campo" id="bloco-ganho">
-        <span><span data-i18n>Input volume</span> <b id="ganho-valor"></b></span>
-        <input type="range" id="rng-ganho" min="-12" max="24" step="1">
-      </div>
-
-      <label class="alternador">
-        <input type="checkbox" id="chk-eco">
-        <span class="trilha"></span>
-        <span><span data-i18n>Echo cancellation</span> <small data-i18n>turn off if you use headphones — sounds more natural</small></span>
-      </label>
-
-      <div class="secao-titulo" data-i18n>Privacy</div>
-      <label class="alternador">
-        <input type="checkbox" id="chk-esconder-ip">
-        <span class="trilha"></span>
-        <span><span data-i18n>Hide my IP</span> <small data-i18n>your voice and screen go through a secure relay, so nobody in the call sees your IP. Adds a tiny delay and lowers screen sharing to 4 Mbps.</small></span>
-      </label>
-      <p class="aviso-rede" id="aviso-rede"></p>
-
-      <div class="secao-titulo" data-i18n>Shortcuts</div>
-      <div class="atalhos">
-        <div><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>M</kbd> <span data-i18n>mute / unmute</span></div>
-        <div><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>D</kbd> <span data-i18n>deafen</span></div>
-        <small data-i18n>Work even with your game open.</small>
-      </div>
-
-      <button id="btn-sair-conta" class="botao-perigo" data-i18n>Sign out</button>
+      <section class="config config-pagina" data-pagina-nest="membros" hidden>
+        <h3 data-i18n>Members</h3>
+        <div class="cargos-legenda">
+          <span><b class="tag-dono tag-admin" data-i18n>Admin</b> <span data-i18n>edits the Nest and channels, manages roles</span></span>
+          <span><b class="tag-dono tag-moderator" data-i18n>Moderator</b> <span data-i18n>deletes messages, kicks Members</span></span>
+        </div>
+        <div class="lista-membros-nest" id="lista-membros-nest"></div>
+      </section>
     </div>
   </dialog>
 

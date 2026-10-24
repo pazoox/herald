@@ -79,6 +79,28 @@ function nomeDe(userId) {
   return est.perfis.get(userId)?.display_name || '…';
 }
 
+// Cargos no Nest: owner 3 · admin 2 · moderator 1 · member 0 (as regras de verdade ficam no Supabase)
+const NIVEIS = { owner: 3, admin: 2, moderator: 1, member: 0 };
+const NOMES_CARGO = { owner: 'Owner', admin: 'Admin', moderator: 'Moderator', member: 'Member' };
+function cargoDe(nestId, userId) {
+  if (est.nests.get(nestId)?.owner_id === userId) return 'owner';
+  return est.membros.get(nestId)?.get(userId) || 'member';
+}
+function nivelDe(nestId, userId) {
+  return est.membros.get(nestId)?.has(userId) || est.nests.get(nestId)?.owner_id === userId ? NIVEIS[cargoDe(nestId, userId)] : -1;
+}
+const meuNivel = (nestId = est.nestAtual) => nivelDe(nestId, est.eu?.id);
+// Cargos que eu posso dar pra alguém (sempre abaixo do meu)
+function cargosQuePossoDar(nestId) {
+  return ['member', 'moderator', 'admin'].filter((r) => NIVEIS[r] < meuNivel(nestId) && meuNivel(nestId) >= 2);
+}
+// Posso mexer nessa pessoa? (expulsar / trocar cargo) — só quem está abaixo de mim
+const possoGerenciar = (nestId, userId) => userId !== est.eu?.id && meuNivel(nestId) >= 1 && meuNivel(nestId) > nivelDe(nestId, userId);
+function etiquetaCargo(nestId, userId) {
+  const cargo = cargoDe(nestId, userId);
+  return cargo === 'member' ? '' : ` <span class="tag-dono tag-${cargo}">${esc(t(NOMES_CARGO[cargo]))}</span>`;
+}
+
 function aviso(texto) {
   const el = document.createElement('div');
   el.className = 'aviso';
@@ -133,6 +155,7 @@ function traduzirErro(err) {
   if (/at least 6|password should/i.test(m)) return t('Password must have at least 6 characters.');
   if (/failed to fetch|network/i.test(m)) return t('Could not connect. Check your internet.');
   if (/invalid invite/i.test(m)) return t('This invite is not valid.');
+  if (/not allowed|only the owner|row-level security|permission denied/i.test(m)) return t("You don't have permission to do that.");
   return t('Something went wrong: {msg}', { msg: m });
 }
 
@@ -450,7 +473,7 @@ function renderMensagens(rolarFim = false) {
   let anterior = null;
   for (const m of lista) {
     const agrupa = anterior && anterior.author_id === m.author_id && new Date(m.created_at) - new Date(anterior.created_at) < 5 * 60000;
-    const meu = m.author_id === est.eu.id || est.nests.get(est.nestAtual)?.owner_id === est.eu.id;
+    const meu = m.author_id === est.eu.id || meuNivel() >= 1; // Moderator pra cima apaga a dos outros
     const apagar = meu ? `<button class="msg-apagar" data-apagar="${m.id}" title="${esc(t('Delete message'))}">${icone('lixo')}</button>` : '';
     if (agrupa) {
       html += `<li class="msg continua"><span class="msg-hora-lado">${horaCurta(m.created_at)}</span><div class="msg-texto">${linkificar(m.content)}</div>${apagar}</li>`;
@@ -518,7 +541,7 @@ function renderCanais() {
     $('#canais-lista').innerHTML = '';
     return;
   }
-  const dono = nest.owner_id === est.eu.id;
+  const dono = meuNivel(nest.id) >= 2; // Admin pra cima mexe nos canais
   const canais = est.canais.get(nest.id) || [];
   const presenca = presencaDe(nest.id);
   const secao = (tipo, titulo) => {
@@ -527,9 +550,9 @@ function renderCanais() {
     let html = `<div class="secao-canais"><span>${esc(t(titulo))}</span>${mais}</div>`;
     for (const c of itens) {
       const ativo = tipo === 'text' ? est.vista === 'texto' && c.id === canalTextoAtual() : est.vista === 'voz' && c.id === est.vozVista;
-      const apagar = dono ? `<button class="canal-apagar" data-apagar-canal="${c.id}" title="${esc(t('Delete channel'))}">${icone('lixo')}</button>` : '';
+
       html += `<div class="canal ${ativo ? 'ligado' : ''} ${est.naoLidas.has(c.id) ? 'nao-lida' : ''} ${voz.canalId === c.id ? 'conectado' : ''}" data-canal="${c.id}">
-        ${icone(tipo === 'text' ? 'hash' : 'volume')}<span class="canal-nome">${esc(c.name)}</span>${apagar}</div>`;
+        ${icone(tipo === 'text' ? 'hash' : 'volume')}<span class="canal-nome">${esc(c.name)}</span></div>`;
       if (tipo === 'voice') {
         const pessoas = [...presenca.entries()].filter(([, p]) => p.voz === c.id);
         if (pessoas.length) {
@@ -551,17 +574,6 @@ function renderCanais() {
 $('#canais-lista').addEventListener('click', async (e) => {
   const novo = e.target.closest('[data-novo-canal]');
   if (novo) return abrirNovoCanal(novo.dataset.novoCanal);
-  const apagar = e.target.closest('[data-apagar-canal]');
-  if (apagar) {
-    e.stopPropagation();
-    const canal = (est.canais.get(est.nestAtual) || []).find((c) => c.id === apagar.dataset.apagarCanal);
-    if (canal && (await confirmar(t('Delete #{name}?', { name: canal.name })))) {
-      if (voz.canalId === canal.id) await chamada.sair();
-      await sb.from('channels').delete().eq('id', canal.id);
-      recarregarEstrutura();
-    }
-    return;
-  }
   const item = e.target.closest('[data-canal]');
   if (!item) return;
   const canal = (est.canais.get(est.nestAtual) || []).find((c) => c.id === item.dataset.canal);
@@ -593,14 +605,13 @@ function renderUsuario() {
 function renderMembros() {
   const membros = est.membros.get(est.nestAtual) || new Map();
   const presenca = presencaDe(est.nestAtual);
-  const dono = est.nests.get(est.nestAtual)?.owner_id;
   const lista = [...membros.keys()].sort((a, b) => nomeDe(a).localeCompare(nomeDe(b)));
   const online = lista.filter((id) => presenca.has(id));
   const offline = lista.filter((id) => !presenca.has(id));
   const item = (id, on) => {
     const p = presenca.get(id);
     const sub = p?.voz ? `${icone('volume')} ${esc((est.canais.get(est.nestAtual) || []).find((c) => c.id === p.voz)?.name || '')}` : '';
-    return `<div class="membro ${on ? '' : 'off'}" data-usuario="${id}">${avatarHtml(id)}<div class="membro-info"><span class="membro-nome">${esc(nomeDe(id))}${id === dono ? ` <span class="tag-dono">${esc(t('Owner'))}</span>` : ''}</span>${sub ? `<span class="membro-sub">${sub}</span>` : ''}</div></div>`;
+    return `<div class="membro ${on ? '' : 'off'}" data-usuario="${id}">${avatarHtml(id)}<div class="membro-info"><span class="membro-nome">${esc(nomeDe(id))}${etiquetaCargo(est.nestAtual, id)}</span>${sub ? `<span class="membro-sub">${sub}</span>` : ''}</div></div>`;
   };
   $('#contagem-membros').textContent = lista.length ? `· ${lista.length}` : '';
   $('#membros').innerHTML =
@@ -672,7 +683,7 @@ function abrirConvite() {
   if (!nest) return;
   $('#convite-titulo').textContent = t('Invite friends to {name}', { name: nest.name });
   $('#convite-link').value = linkConvite(nest);
-  $('#btn-novo-convite').hidden = nest.owner_id !== est.eu.id;
+  $('#btn-novo-convite').hidden = meuNivel(nest.id) < 2;
   $('#dlg-convite').showModal();
 }
 
@@ -697,6 +708,7 @@ $('#btn-menu-nest').onclick = (e) => {
   const dono = nest.owner_id === est.eu.id;
   const menu = $('#menu-nest');
   menu.innerHTML = `<button data-menu="convidar">${icone('convite')}${esc(t('Invite people'))}</button>
+    ${meuNivel(nest.id) >= 2 ? `<button data-menu="editar">${icone('ajustes')}${esc(t('Edit Nest'))}</button>` : ''}
     ${dono ? `<button data-menu="apagar" class="perigo">${icone('lixo')}${esc(t('Delete Nest'))}</button>` : `<button data-menu="sair" class="perigo">${icone('porta')}${esc(t('Leave Nest'))}</button>`}`;
   menu.hidden = !menu.hidden;
 };
@@ -709,7 +721,12 @@ $('#menu-nest').onclick = async (e) => {
   $('#menu-nest').hidden = true;
   const nest = est.nests.get(est.nestAtual);
   if (b.dataset.menu === 'convidar') return abrirConvite();
-  const apagar = b.dataset.menu === 'apagar';
+  if (b.dataset.menu === 'editar') return abrirEditarNest(nest);
+  sairOuApagarNest(nest, b.dataset.menu === 'apagar');
+};
+
+// Sair do Nest (ou apagar, se for o dono) — usado no menu do nome e no botão direito do ícone
+async function sairOuApagarNest(nest, apagar) {
   const texto = apagar ? t('Delete {name} for everyone? This cannot be undone.', { name: nest.name }) : t('Leave {name}?', { name: nest.name });
   if (!(await confirmar(texto))) return;
   if (voz.canalId && (est.canais.get(nest.id) || []).some((c) => c.id === voz.canalId)) await chamada.sair();
@@ -719,14 +736,66 @@ $('#menu-nest').onclick = async (e) => {
   if (error) return aviso(traduzirErro(error));
   await carregarEstrutura();
   abrirNest([...est.nests.keys()][0] || null);
-};
+}
+
+// Botão direito no ícone do Nest (barra da esquerda)
+function iconeNest(n) {
+  const iniciais = n.name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+  return `<span class="mp-nest" style="${n.icon_url ? '' : `background:${gradiente(n.id)}`}">${n.icon_url ? `<img src="${esc(n.icon_url)}" alt="">` : esc(iniciais)}</span>`;
+}
+function abrirMenuNest(nest, x, y) {
+  fecharMenuPessoa();
+  const dono = nest.owner_id === est.eu.id;
+  menuPessoa = document.createElement('div');
+  menuPessoa.className = 'menu-pessoa';
+  menuPessoa.innerHTML = `<div class="mp-topo">${iconeNest(nest)}<div><b>${esc(nest.name)}</b><span>${esc(t((est.membros.get(nest.id)?.size || 1) === 1 ? '{n} member' : '{n} members', { n: est.membros.get(nest.id)?.size || 1 }))}</span></div></div>
+    <button data-mn="convidar">${icone('convite')}${esc(t('Invite people'))}</button>
+    ${meuNivel(nest.id) >= 2 ? `<button data-mn="editar">${icone('ajustes')}${esc(t('Edit Nest'))}</button>` : ''}
+    ${dono
+      ? `<button data-mn="apagar" class="perigo">${icone('lixo')}${esc(t('Delete Nest'))}</button>`
+      : `<button data-mn="sair" class="perigo">${icone('porta')}${esc(t('Leave Nest'))}</button>`}`;
+  document.body.appendChild(menuPessoa);
+  const r = menuPessoa.getBoundingClientRect();
+  menuPessoa.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`;
+  menuPessoa.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`;
+  menuPessoa.addEventListener('click', (e) => {
+    const acao = e.target.closest('[data-mn]')?.dataset.mn;
+    if (!acao) return;
+    fecharMenuPessoa();
+    if (acao === 'convidar') {
+      if (est.nestAtual !== nest.id) abrirNest(nest.id);
+      abrirConvite();
+    } else if (acao === 'editar') abrirEditarNest(nest);
+    else sairOuApagarNest(nest, acao === 'apagar');
+  });
+}
+document.addEventListener('contextmenu', (e) => {
+  const b = e.target.closest('[data-nest]');
+  const nest = b && est.nests.get(b.dataset.nest);
+  if (!nest || !est.eu) return;
+  e.preventDefault();
+  abrirMenuNest(nest, e.clientX, e.clientY);
+});
 
 // Novo canal
 let tipoNovoCanal = 'text';
+let canalEditando = null; // renomeando (o mesmo diálogo do "novo canal")
 function abrirNovoCanal(tipo) {
   tipoNovoCanal = tipo;
+  canalEditando = null;
+  $('#canal-titulo').textContent = t('New channel');
+  $('#canal-salvar').textContent = t('Create');
   $('#canal-nome').value = '';
   $('#dlg-canal').showModal();
+}
+function abrirRenomearCanal(canal) {
+  tipoNovoCanal = canal.kind;
+  canalEditando = canal;
+  $('#canal-titulo').textContent = t('Rename channel');
+  $('#canal-salvar').textContent = t('Save');
+  $('#canal-nome').value = canal.name;
+  $('#dlg-canal').showModal();
+  $('#canal-nome').select();
 }
 $('#form-canal').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -734,7 +803,9 @@ $('#form-canal').addEventListener('submit', async (e) => {
   if (tipoNovoCanal === 'text') nome = nome.toLowerCase().replace(/\s+/g, '-');
   if (!nome) return;
   const canais = est.canais.get(est.nestAtual) || [];
-  const { error } = await sb.from('channels').insert({ nest_id: est.nestAtual, name: nome, kind: tipoNovoCanal, position: canais.length });
+  const { error } = canalEditando
+    ? await sb.from('channels').update({ name: nome }).eq('id', canalEditando.id)
+    : await sb.from('channels').insert({ nest_id: est.nestAtual, name: nome, kind: tipoNovoCanal, position: canais.length });
   if (error) return aviso(traduzirErro(error));
   $('#dlg-canal').close();
   recarregarEstrutura();
@@ -941,7 +1012,7 @@ function atualizarVideo(el, d) {
   el.classList.toggle('stats-fixas', ler('herald-stats-fixas') === '1');
   const video = el.querySelector('video');
   if (video.srcObject !== (d.stream || null)) video.srcObject = d.stream || null;
-  if (!d.local) video.muted = voz.surdo;
+  // o deafen só silencia as vozes; o som da transmissão continua (dá pra baixar no botão direito)
   el.classList.toggle('popout', Boolean(janelasTela.get(d.chave) && !janelasTela.get(d.chave).closed));
   el.classList.toggle('carregando', !d.stream);
   el.querySelector('.carregando-texto').hidden = Boolean(d.stream);
@@ -1002,11 +1073,12 @@ const roleta = criarRoleta({
   aviso,
 });
 
+// o deafen não cala o Rádio (igual à transmissão): cada um baixa no volume dele
 const radio = criarRadio({
   eu: () => est.eu.id,
   nomeDe,
   enviar: (estado, peerId) => chamada.enviarRadio(estado, peerId),
-  mudo: () => voz.surdo,
+  mudo: () => false,
   aviso,
   buscar: (texto) => window.herald.radioBuscar(texto),
 });
@@ -1194,6 +1266,14 @@ function abrirMenuPessoa(userId, x, y) {
     }
   }
   html += `<button data-mp="copiar">${icone('copiar')}${esc(t('Copy name'))}</button>`;
+  if (possoGerenciar(est.nestAtual, userId)) {
+    const cargos = cargosQuePossoDar(est.nestAtual);
+    if (cargos.length) {
+      html += `<div class="mp-linha"></div><div class="mp-bloco"><div class="mp-rotulo"><span>${esc(t('Role'))}</span></div><div class="segmentado mp-cargos">${cargos
+        .map((r) => `<button data-cargo="${r}" class="${cargoDe(est.nestAtual, userId) === r ? 'ligado' : ''}">${esc(t(NOMES_CARGO[r]))}</button>`).join('')}</div></div>`;
+    }
+    html += `<button data-mp="expulsar" class="perigo">${icone('porta')}${esc(t('Kick from Nest'))}</button>`;
+  }
 
   menuPessoa = document.createElement('div');
   menuPessoa.className = 'menu-pessoa';
@@ -1229,8 +1309,165 @@ function abrirMenuPessoa(userId, x, y) {
       await navigator.clipboard.writeText(nomeDe(userId));
       aviso(t('Copied!'));
     }
+    if (acao === 'expulsar') expulsar(est.nestAtual, userId);
+  });
+  menuPessoa.querySelector('.mp-cargos')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cargo]');
+    if (!b) return;
+    fecharMenuPessoa();
+    mudarCargo(est.nestAtual, userId, b.dataset.cargo);
   });
 }
+
+// ================= Cargos: trocar, expulsar, passar a posse =================
+
+async function mudarCargo(nestId, userId, cargo) {
+  if (cargoDe(nestId, userId) === cargo) return;
+  const { error } = await sb.rpc('set_member_role', { n: nestId, target: userId, new_role: cargo });
+  if (error) return aviso(traduzirErro(error));
+  est.membros.get(nestId)?.set(userId, cargo);
+  aviso(t('{name} is now {role}', { name: nomeDe(userId), role: t(NOMES_CARGO[cargo]) }));
+  render();
+  if ($('#dlg-editar-nest').open) renderMembrosNest();
+}
+
+async function expulsar(nestId, userId) {
+  const nest = est.nests.get(nestId);
+  if (!(await confirmar(t('Kick {name} from {nest}? They can come back with an invite link.', { name: nomeDe(userId), nest: nest.name })))) return;
+  // sem permissão o banco não dá erro, só não apaga nada: confere a contagem
+  const { error, count } = await sb.from('nest_members').delete({ count: 'exact' }).eq('nest_id', nestId).eq('user_id', userId);
+  if (error || !count) return aviso(traduzirErro(error || 'not allowed'));
+  est.membros.get(nestId)?.delete(userId);
+  aviso(t('{name} was kicked', { name: nomeDe(userId) }));
+  render();
+  if ($('#dlg-editar-nest').open) renderMembrosNest();
+}
+
+async function passarPosse(nestId, userId) {
+  const nest = est.nests.get(nestId);
+  if (!(await confirmar(t('Make {name} the owner of {nest}? You will become an Admin.', { name: nomeDe(userId), nest: nest.name })))) return;
+  const { error } = await sb.rpc('transfer_nest', { n: nestId, target: userId });
+  if (error) return aviso(traduzirErro(error));
+  await carregarEstrutura();
+  render();
+  if ($('#dlg-editar-nest').open) abrirEditarNest(est.nests.get(nestId));
+}
+
+// ================= Edit Nest =================
+
+let nestEditando = null;
+
+function abrirPaginaNest(pagina) {
+  $$('#menu-editar-nest [data-pagina-nest]').forEach((b) => b.classList.toggle('ligado', b.dataset.paginaNest === pagina));
+  $$('#dlg-editar-nest .config-pagina').forEach((s) => (s.hidden = s.dataset.paginaNest !== pagina));
+}
+$('#menu-editar-nest').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pagina-nest]');
+  if (b) abrirPaginaNest(b.dataset.paginaNest);
+});
+
+function abrirEditarNest(nest) {
+  if (!nest) return;
+  nestEditando = nest;
+  $('#editar-nest-titulo').textContent = nest.name;
+  $('#nest-nome-editar').value = nest.name;
+  $('#nest-icone').outerHTML = iconeNest(nest).replace('class="mp-nest"', 'id="nest-icone" class="nest-icone-grande"');
+  $('#nest-convite-editar').value = linkConvite(nest);
+  $('#btn-apagar-nest').hidden = nest.owner_id !== est.eu.id;
+  renderMembrosNest();
+  if (!$('#dlg-editar-nest').open) {
+    abrirPaginaNest('geral');
+    $('#dlg-editar-nest').showModal();
+  }
+}
+
+function renderMembrosNest() {
+  const nest = nestEditando;
+  const membros = [...(est.membros.get(nest.id)?.keys() || [])].sort(
+    (a, b) => nivelDe(nest.id, b) - nivelDe(nest.id, a) || nomeDe(a).localeCompare(nomeDe(b)),
+  );
+  const cargos = cargosQuePossoDar(nest.id);
+  const souDono = nest.owner_id === est.eu.id;
+  $('#lista-membros-nest').innerHTML = membros
+    .map((id) => {
+      const cargo = cargoDe(nest.id, id);
+      const pode = possoGerenciar(nest.id, id);
+      const seletor = pode && cargos.length
+        ? `<select class="select cargo-select" data-cargo-de="${id}">
+            ${cargos.map((r) => `<option value="${r}" ${r === cargo ? 'selected' : ''}>${esc(t(NOMES_CARGO[r]))}</option>`).join('')}
+            ${souDono ? `<option value="dono">${esc(t('Make owner…'))}</option>` : ''}
+          </select>`
+        : `<span class="cargo-fixo">${cargo === 'member' ? esc(t('Member')) : etiquetaCargo(nest.id, id)}</span>`;
+      const chute = pode ? `<button class="botao-icone pequeno perigo" data-expulsar="${id}" data-tip="${esc(t('Kick from Nest'))}">${icone('porta')}</button>` : '<span class="botao-icone pequeno"></span>';
+      return `<div class="membro-nest" data-usuario="${id}">${avatarHtml(id)}<span class="membro-nest-nome">${esc(nomeDe(id))}${id === est.eu.id ? ` <small>(${esc(t('you'))})</small>` : ''}</span>${seletor}${chute}</div>`;
+    })
+    .join('');
+}
+
+$('#lista-membros-nest').addEventListener('change', (e) => {
+  const s = e.target.closest('[data-cargo-de]');
+  if (!s) return;
+  const userId = s.dataset.cargoDe;
+  if (s.value === 'dono') {
+    s.value = cargoDe(nestEditando.id, userId);
+    return passarPosse(nestEditando.id, userId);
+  }
+  mudarCargo(nestEditando.id, userId, s.value);
+});
+$('#lista-membros-nest').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-expulsar]');
+  if (b) expulsar(nestEditando.id, b.dataset.expulsar);
+});
+
+$('#btn-salvar-nest').onclick = async () => {
+  const nome = $('#nest-nome-editar').value.trim().slice(0, 48);
+  if (!nome) return;
+  const { error } = await sb.from('nests').update({ name: nome }).eq('id', nestEditando.id);
+  if (error) return aviso(traduzirErro(error));
+  nestEditando.name = nome;
+  $('#editar-nest-titulo').textContent = nome;
+  aviso(t('Saved!'));
+  render();
+};
+
+// Ícone do Nest: quadrado de 256px, na pasta nest-<id> do bucket de fotos
+$('#nest-icone-arquivo').onchange = async (e) => {
+  const arquivo = e.target.files[0];
+  e.target.value = '';
+  if (!arquivo) return;
+  if (arquivo.size > 8 * 1024 * 1024) return aviso(t('Image must be under 2 MB.'));
+  const img = await createImageBitmap(arquivo);
+  const lado = Math.min(img.width, img.height);
+  const canvas = new OffscreenCanvas(256, 256);
+  canvas.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, 256, 256);
+  const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.9 });
+  const caminho = `nest-${nestEditando.id}/icone-${Date.now()}.webp`;
+  const { error } = await sb.storage.from('avatars').upload(caminho, blob, { contentType: 'image/webp', upsert: true });
+  if (error) return aviso(traduzirErro(error));
+  const url = sb.storage.from('avatars').getPublicUrl(caminho).data.publicUrl;
+  const { error: erro2 } = await sb.from('nests').update({ icon_url: url }).eq('id', nestEditando.id);
+  if (erro2) return aviso(traduzirErro(erro2));
+  nestEditando.icon_url = url;
+  abrirEditarNest(nestEditando);
+  aviso(t('Saved!'));
+  render();
+};
+
+$('#btn-copiar-convite-nest').onclick = async () => {
+  await navigator.clipboard.writeText($('#nest-convite-editar').value);
+  aviso(t('Copied!'));
+};
+$('#btn-novo-convite-nest').onclick = async () => {
+  if (!(await confirmar(t('The old link will stop working.')))) return;
+  const { data, error } = await sb.rpc('reset_invite', { n: nestEditando.id });
+  if (error) return aviso(traduzirErro(error));
+  nestEditando.invite_code = data;
+  $('#nest-convite-editar').value = linkConvite(nestEditando);
+};
+$('#btn-apagar-nest').onclick = async () => {
+  $('#dlg-editar-nest').close();
+  sairOuApagarNest(nestEditando, true);
+};
 
 document.addEventListener('contextmenu', (e) => {
   const alvo = e.target.closest('[data-usuario], .cartao-pessoa[data-fala], .msg [data-fala]');
@@ -1240,6 +1477,71 @@ document.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   abrirMenuPessoa(userId, e.clientX, e.clientY);
 });
+// ================= Menu de botão direito nos canais =================
+
+function abrirMenuCanal(canal, x, y) {
+  fecharMenuPessoa();
+  const dono = meuNivel(canal.nest_id) >= 2; // Admin pra cima
+  const texto = canal.kind === 'text';
+  const aqui = voz.canalId === canal.id;
+
+  let html = `<div class="mp-topo"><span class="mp-canal">${icone(texto ? 'hash' : 'volume')}</span><div><b>${esc(canal.name)}</b><span>${esc(t(texto ? 'Text channel' : 'Voice channel'))}</span></div></div>`;
+  if (texto && est.naoLidas.has(canal.id)) html += `<button data-mc="lido">${icone('certo')}${esc(t('Mark as read'))}</button>`;
+  if (!texto) html += aqui
+    ? `<button data-mc="sair" class="perigo">${icone('sair')}${esc(t('Disconnect'))}</button>`
+    : `<button data-mc="entrar">${icone('volume')}${esc(t('Join voice'))}</button>`;
+  html += `<button data-mc="copiar">${icone('copiar')}${esc(t('Copy channel name'))}</button>`;
+  if (dono) {
+    html += `<div class="mp-linha"></div>
+      <button data-mc="renomear">${icone('lapis')}${esc(t('Rename channel'))}</button>
+      <button data-mc="novo">${icone('mais')}${esc(t(texto ? 'New text channel' : 'New voice channel'))}</button>
+      <button data-mc="apagar" class="perigo">${icone('lixo')}${esc(t('Delete channel'))}</button>`;
+  }
+
+  menuPessoa = document.createElement('div');
+  menuPessoa.className = 'menu-pessoa';
+  menuPessoa.innerHTML = html;
+  document.body.appendChild(menuPessoa);
+  const r = menuPessoa.getBoundingClientRect();
+  menuPessoa.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`;
+  menuPessoa.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`;
+
+  menuPessoa.addEventListener('click', async (e) => {
+    const acao = e.target.closest('[data-mc]')?.dataset.mc;
+    if (!acao) return;
+    fecharMenuPessoa();
+    if (acao === 'lido') {
+      est.naoLidas.delete(canal.id);
+      renderCanais();
+    }
+    if (acao === 'entrar') {
+      abrirCanal(canal);
+      if (voz.canalId !== canal.id) entrarNaVoz(canal);
+    }
+    if (acao === 'sair') sairDaVoz();
+    if (acao === 'copiar') {
+      await navigator.clipboard.writeText(canal.name);
+      aviso(t('Copied!'));
+    }
+    if (acao === 'renomear') abrirRenomearCanal(canal);
+    if (acao === 'novo') abrirNovoCanal(canal.kind);
+    if (acao === 'apagar' && (await confirmar(t('Delete #{name}?', { name: canal.name })))) {
+      if (voz.canalId === canal.id) await chamada.sair();
+      await sb.from('channels').delete().eq('id', canal.id);
+      recarregarEstrutura();
+    }
+  });
+}
+
+document.addEventListener('contextmenu', (e) => {
+  const item = e.target.closest('[data-canal]');
+  if (!item || !est.eu) return;
+  const canal = [...est.canais.values()].flat().find((c) => c.id === item.dataset.canal);
+  if (!canal) return;
+  e.preventDefault();
+  abrirMenuCanal(canal, e.clientX, e.clientY);
+});
+
 document.addEventListener('mousedown', (e) => {
   if (menuPessoa && !menuPessoa.contains(e.target)) fecharMenuPessoa();
 });
@@ -1361,8 +1663,21 @@ function atualizarOpcoesAudio() {
   $('#ganho-valor').textContent = `${a.ganho > 0 ? '+' : ''}${a.ganho} dB`;
 }
 
+// Settings: menu à esquerda troca a página (Profile / Audio / Preferences)
+function abrirPaginaConfig(pagina) {
+  $$('.config-menu [data-pagina]').forEach((b) => b.classList.toggle('ligado', b.dataset.pagina === pagina));
+  $$('.config-pagina').forEach((s) => (s.hidden = s.dataset.pagina !== pagina));
+}
+$('.config-menu').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pagina]');
+  if (b) abrirPaginaConfig(b.dataset.pagina);
+});
+
 $('#btn-config').onclick = async () => {
+  abrirPaginaConfig('perfil');
   $('#perfil-nome').value = est.eu.display_name;
+  sb?.auth.getUser().then(({ data }) => ($('#perfil-email').value = data?.user?.email || ''));
+  window.herald?.versao?.().then((v) => ($('#config-versao').textContent = `Herald ${v}`));
   $('#perfil-avatar').outerHTML = avatarHtml(est.eu.id, 'grande').replace('class="avatar ', 'id="perfil-avatar" class="avatar ');
   seletorIdioma.definir(IDIOMAS.map((i) => ({ valor: i.id, rotulo: i.nome, bandeira: i.bandeira })), idiomaAtual());
   if (!voz.micStream) {
@@ -1528,7 +1843,8 @@ function montarDemo() {
     { id: 'n-movie', name: 'Movie Night', owner_id: 'u-nina', invite_code: 'demo' },
   ];
   est.nests = new Map(nests.map((n) => [n.id, n]));
-  est.membros = new Map([['n-crew', new Map(pessoas.map(([id]) => [id, id === 'u-eu' ? 'owner' : 'member']))]]);
+  const cargosDemo = { 'u-eu': 'owner', 'u-lu': 'admin', 'u-beto': 'moderator' };
+  est.membros = new Map([['n-crew', new Map(pessoas.map(([id]) => [id, cargosDemo[id] || 'member']))]]);
   est.canais = new Map([[
     'n-crew',
     [
