@@ -1,0 +1,62 @@
+/* Audio Lab — usa os tokens e componentes do app (app.css) */
+body.lab { overflow: auto; height: auto; min-height: 100vh; background: var(--bg); }
+.lab-topo { display: flex; align-items: center; gap: 16px; padding: 52px 32px 18px; }
+.lab-topo img { width: 52px; image-rendering: pixelated; }
+.lab-topo h1 { margin: 0; font-size: 26px; font-weight: 800; }
+.lab-topo p { margin: 2px 0 0; color: var(--text-3); font-weight: 600; }
+
+.lab-grade { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 20px; padding: 0 32px 32px; align-items: start; }
+.lab-esquerda { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.lab-cartao { background: var(--surface); border-radius: var(--r); padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.lab-linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lab-mic { flex: 1; min-width: 220px; }
+.lab-importar { cursor: pointer; }
+.lab-status { margin: 0; color: var(--text-2); font-size: 13px; font-weight: 600; }
+.lab-eco small, .lab-acoes small { display: block; }
+
+.lab-etapas { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.lab-etapa {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 12px 10px; border-radius: 14px;
+  background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); text-align: left; transition: background .12s, box-shadow .12s;
+}
+.lab-etapa:hover { background: var(--panel-2); }
+.lab-etapa.ligado { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.lab-etapa b { font-weight: 800; font-size: 13.5px; }
+.lab-etapa small { color: var(--text-3); font-size: 11px; font-weight: 600; }
+.lab-etapa-n { position: absolute; top: 8px; right: 10px; font: 700 11px var(--mono); color: var(--text-3); }
+.lab-medidas { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; font: 600 11px var(--mono); color: var(--text-3); }
+.lab-medidas b { color: var(--text); font-weight: 700; }
+.lab-medidas b.ruim { color: var(--danger); }
+
+.lab-onda { width: 100%; height: 90px; background: var(--bg); border-radius: 12px; cursor: pointer; }
+.lab-player { gap: 14px; }
+.lab-tempo { font: 700 14px var(--mono); color: var(--text-2); min-width: 64px; }
+.lab-dica { margin-left: auto; color: var(--text-3); font-size: 12px; font-weight: 600; }
+.lab-mini { font-size: 12.5px; }
+
+.lab-espectro-topo b { font-weight: 800; }
+.lab-legenda { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.lab-legenda i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; margin-left: 10px; }
+.cor-cru { background: #716b82; }
+.cor-sel { background: var(--accent); }
+.cor-final { background: var(--lima); }
+.lab-espectro { width: 100%; height: 240px; background: var(--bg); border-radius: 12px; }
+
+.lab-direita { position: sticky; top: 52px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 70px); }
+.lab-ajustes { background: var(--surface); border-radius: var(--r); padding: 8px 18px; overflow-y: auto; display: flex; flex-direction: column; }
+.lab-grupo { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.lab-grupo:last-child { border-bottom: 0; }
+.lab-grupo.desligado > :not(.lab-grupo-topo) { opacity: .4; }
+.lab-grupo-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.lab-grupo-topo b { font-weight: 800; font-size: 14px; }
+.lab-nota { color: var(--text-3); font-size: 11.5px; font-weight: 600; margin-top: -4px; }
+.lab-slider { display: grid; grid-template-columns: 128px 1fr 74px; align-items: center; gap: 10px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.lab-slider input { width: 100%; accent-color: var(--accent); }
+.lab-slider b { font: 700 12px var(--mono); color: var(--text); text-align: right; }
+.lab-banda { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; background: var(--panel); }
+.lab-banda select {
+  align-self: flex-start; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: 700 12px var(--sans); color: var(--text);
+}
+.lab-acoes { background: var(--surface); border-radius: var(--r); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.lab-acoes .lab-linha > button { flex: 1; }
+.lab-escolha { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: 700 12px var(--sans); color: var(--text); }

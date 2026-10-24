@@ -5,6 +5,7 @@
 
 import { joinRoom } from './sinal.js';
 import { APP_ID } from './config.js';
+import { criarColetor, nomeDoMic, eqComTom, EQ_PADRAO } from './calibracao.js';
 
 const BITRATE_VOZ = 128_000;
 export const QUALIDADES = {
@@ -166,15 +167,27 @@ function contexto() {
 
 // ================= Tratamento do microfone =================
 //
-// microfone → filtro de graves (80 Hz) → supressão de ruído com IA (DeepFilterNet3)
-//   → volume automático (nivelador) ou volume manual → timbre (EQ) → compressor suave
-//   + limitador com antecipação (nunca clipa) → o que vai pra chamada
+// "Modo sólido" (escolhido no Audio Lab, out/2026):
+// microfone já tratado pelo Chrome (WebRTC, o mesmo do Google Meet: ruído constante + volume
+//   automático) → corta graves → PORTEIRO de ruído (a IA DeepFilterNet3, num Worker, só decide
+//   se tem voz; o som passa intacto e é abaixado nas pausas — some estalo, teclado, batida)
+//   → EQ (o da calibração da pessoa, por microfone) → limitador com antecipação (nunca clipa)
 //
 // O que sai daqui é sempre a mesma trilha: trocar microfone ou opção não
 // interrompe a chamada (só a entrada da cadeia muda).
+//
+// Empilhar etapas nossas (IA filtrando + volume + compressor + expansor) soava picado.
 
 const PADRAO_AUDIO = { ruido: true, forca: 'forte', auto: true, ganho: 0, eco: true };
 export const audio = { ...PADRAO_AUDIO, ...lerJson('herald-audio'), ganhoAuto: 0 };
+// só o limitador de segurança (o volume já vem certo do Chrome)
+const DINAMICA = { comprimir: false, ganho: 0, teto: -1, portao: -100 };
+// Porteiro: Strong = ajuste do Pazi no Audio Lab (limpa tudo nas pausas); Natural = mais folgado (protege voz baixinha)
+const PORTEIRO = {
+  forte: { sensibilidade: 25, fundo: 40, segurar: 60 },
+  natural: { sensibilidade: 32, fundo: 28, segurar: 180 },
+};
+const SEGUNDOS_AUTO = 40; // de voz, pra calibrar sozinho durante a call
 
 function lerJson(k) {
   try { return JSON.parse(ler(k)) || {}; } catch { return {}; }
@@ -185,33 +198,45 @@ let entradaStream = null;
 let fonte = null;
 let entradaDispositivo = null;
 
+// Calibração: perfil do microfone atual + coleta da voz
+const calib = {
+  mic: null, // nome do mic ("Fifine Microphone")
+  perfil: null, // EQ calibrado (null = ainda não calibrou)
+  coletor: null,
+  modo: null, // 'auto' | 'manual'
+  armazenamento: null, // { ler(mic), gravar(mic, perfil), apagar(mic) } — vem do app (Supabase)
+};
+
 async function montarCadeia() {
   if (cadeia) return cadeia;
   const ctx = contexto();
-  await Promise.all(['deepfilter', 'nivelador', 'dinamica'].map((m) => ctx.audioWorklet.addModule(`dist/audio/${m}.js`)));
+  await Promise.all(['ia-ponte', 'dinamica', 'gravador'].map((m) => ctx.audioWorklet.addModule(`dist/audio/${m}.js`)));
   const bytes = await fetch('dist/audio/deepfilter.wasm').then((r) => r.arrayBuffer());
   const modulo = await WebAssembly.compile(bytes);
 
-  const graves = new BiquadFilterNode(ctx, { type: 'highpass', frequency: 80, Q: 0.7 });
-  const ruido = new AudioWorkletNode(ctx, 'deepfilternet-processor', {
-    numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit',
-    processorOptions: { wasmModule: modulo, attenuationLimit: 100 },
-  });
-  const nivelador = new AudioWorkletNode(ctx, 'nivelador', { channelCount: 1, channelCountMode: 'explicit' });
-  nivelador.port.onmessage = (e) => { audio.ganhoAuto = e.data; };
-  const manual = new GainNode(ctx);
-  // Timbre: tira um pouco do "embolado" (300 Hz) e dá um brilho sutil (6 kHz)
-  const embolado = new BiquadFilterNode(ctx, { type: 'peaking', frequency: 300, Q: 1, gain: -2.5 });
-  const brilho = new BiquadFilterNode(ctx, { type: 'highshelf', frequency: 6000, gain: 2 });
-  // Compressor suave + limitador com antecipação (nunca clipa) — ver audio/dinamica.js
-  const dinamica = new AudioWorkletNode(ctx, 'dinamica', { channelCount: 1, channelCountMode: 'explicit' });
+  const graves = new BiquadFilterNode(ctx, { type: 'highpass', frequency: EQ_PADRAO.graves, Q: 0.7 });
+  // A IA roda num Worker (fora do processador de áudio): rodando direto nele ela às vezes
+  // passava do tempo e o som "picava". A ponte segura ~20 ms de folga.
+  const ruido = new AudioWorkletNode(ctx, 'ia-ponte', { channelCount: 1, channelCountMode: 'explicit' });
+  const iaWorker = new Worker('dist/audio/ia-worker.js');
+  const canalIA = new MessageChannel();
+  iaWorker.postMessage({ tipo: 'iniciar', wasmModule: modulo, limite: 100, modo: 'porteiro', porteiro: PORTEIRO.forte }, [canalIA.port2]);
+  ruido.port.postMessage({ tipo: 'porta' }, [canalIA.port1]);
+  const manual = new GainNode(ctx); // volume manual (com o automático do Chrome ligado fica em 0 dB)
+  // EQ de 5 bandas (valores vêm do perfil calibrado do microfone)
+  const eq = EQ_PADRAO.bandas.map((b) => new BiquadFilterNode(ctx, { type: b.tipo, frequency: b.freq, gain: b.ganho, Q: b.q }));
+  for (let i = 0; i < eq.length - 1; i++) eq[i].connect(eq[i + 1]);
+  const dinamica = new AudioWorkletNode(ctx, 'dinamica', { channelCount: 1, channelCountMode: 'explicit', processorOptions: DINAMICA });
   const destino = ctx.createMediaStreamDestination();
   const medidor = new AnalyserNode(ctx, { fftSize: 512 });
+  // escuta a voz depois da IA (só enquanto calibra)
+  const escuta = new AudioWorkletNode(ctx, 'gravador', { channelCount: 1, channelCountMode: 'explicit' });
+  escuta.port.onmessage = (e) => coletar(e.data);
 
-  embolado.connect(brilho).connect(dinamica).connect(destino);
+  eq.at(-1).connect(dinamica).connect(destino);
   dinamica.connect(medidor);
 
-  cadeia = { ctx, graves, ruido, nivelador, manual, timbre: embolado, destino, medidor };
+  cadeia = { ctx, graves, ruido, iaWorker, manual, timbre: eq[0], eq, destino, medidor, escuta };
   ligarCadeia();
 
   micTrack = destino.stream.getAudioTracks()[0];
@@ -224,20 +249,170 @@ async function montarCadeia() {
 
 // Liga os blocos conforme as opções (sem recapturar o microfone)
 function ligarCadeia() {
-  const { graves, ruido, nivelador, manual, timbre } = cadeia;
-  for (const no of [graves, ruido, nivelador, manual]) no.disconnect();
-  ruido.port.postMessage({ type: 'setEnabled', value: audio.ruido });
-  // Limite de quanto a IA pode abaixar o ruído. 100 dB (o máximo) zerava os
-  // pedacinhos fracos entre sílabas e "esburacava" a voz.
-  ruido.port.postMessage({ type: 'setAttenuationLimit', value: audio.forca === 'forte' ? 35 : 18 });
-  manual.gain.value = 10 ** (audio.ganho / 20);
-  const volume = audio.auto ? nivelador : manual;
-  graves.connect(ruido).connect(volume).connect(timbre);
+  const { graves, ruido, iaWorker, manual, timbre } = cadeia;
+  for (const no of [graves, ruido, manual]) no.disconnect();
+  // IA ligada = porteiro (Strong/Natural); desligada = som passa direto
+  iaWorker.postMessage({ type: 'setEnabled', value: audio.ruido });
+  iaWorker.postMessage({ type: 'modo', value: audio.ruido ? 'porteiro' : 'filtro' });
+  iaWorker.postMessage({ type: 'porteiro', value: PORTEIRO[audio.forca] || PORTEIRO.forte });
+  manual.gain.value = audio.auto ? 1 : 10 ** (audio.ganho / 20);
+  graves.connect(ruido).connect(manual).connect(timbre);
+  if (calib.coletor) ruido.connect(cadeia.escuta);
   if (fonte) fonte.connect(graves);
 }
 
+// Põe um EQ na cadeia (devagar = troca suave, em alguns segundos, pra ninguém perceber)
+function aplicarEq(eq, devagar = false) {
+  if (!cadeia) return;
+  const t = cadeia.ctx.currentTime;
+  const tempo = devagar ? 2 : 0.05;
+  cadeia.graves.frequency.setTargetAtTime(eq.graves, t, tempo);
+  eq.bandas.forEach((b, i) => {
+    const no = cadeia.eq[i];
+    no.frequency.setTargetAtTime(b.freq, t, tempo);
+    no.gain.setTargetAtTime(b.ganho, t, tempo);
+    no.Q.setTargetAtTime(b.q, t, tempo);
+  });
+}
+
+function eqDoPerfil(perfil) {
+  return perfil ? eqComTom(perfil, perfil.tom || 0) : EQ_PADRAO;
+}
+
+// ---- coleta da voz pra calibrar ----
+
+function iniciarColeta(modo) {
+  if (!cadeia) return;
+  calib.coletor = criarColetor();
+  calib.modo = modo;
+  cadeia.ruido.connect(cadeia.escuta);
+  avisar('calibracao');
+}
+
+function pararColeta() {
+  if (cadeia && calib.coletor) {
+    try { cadeia.ruido.disconnect(cadeia.escuta); } catch {}
+  }
+  calib.coletor = null;
+  calib.modo = null;
+  avisar('calibracao');
+}
+
+function coletar(pedaco) {
+  const c = calib.coletor;
+  if (!c) return;
+  // no automático só conta voz de verdade na call (mutado pode estar falando com alguém na sala)
+  if (calib.modo === 'auto' && (!voz.conectado || voz.mudo)) return;
+  c.adicionar(pedaco);
+  if (calib.modo === 'auto' && c.segundos >= SEGUNDOS_AUTO) concluirAuto();
+}
+
+async function concluirAuto() {
+  const c = calib.coletor;
+  const perfil = c.calcular();
+  calib.ultimaAmostra = c.amostra();
+  pararColeta();
+  if (!perfil) return;
+  await salvarPerfil(perfil, true);
+  avisar('calibrado', { mic: calib.mic });
+}
+
+// Carrega o perfil do microfone; sem perfil, calibra sozinho na próxima call
+async function carregarPerfilDoMic(rotulo) {
+  const mic = nomeDoMic(rotulo);
+  if (mic === calib.mic && calib.perfil !== undefined) return;
+  calib.mic = mic;
+  calib.perfil = undefined;
+  let perfil = lerJson('herald-voz-' + mic).perfil || null;
+  try { perfil = (await calib.armazenamento?.ler(mic)) ?? perfil; } catch {}
+  if (calib.mic !== mic) return; // trocou de mic no meio
+  calib.perfil = perfil;
+  aplicarEq(eqDoPerfil(perfil));
+  if (!perfil && calib.armazenamento && !calib.coletor) iniciarColeta('auto');
+  if (perfil && calib.modo === 'auto') pararColeta();
+  avisar('calibracao');
+}
+
+export async function salvarPerfil(perfil, devagar = false) {
+  calib.perfil = perfil;
+  aplicarEq(eqDoPerfil(perfil), devagar);
+  guardar('herald-voz-' + calib.mic, JSON.stringify({ perfil }));
+  try { await calib.armazenamento?.gravar(calib.mic, perfil); } catch {}
+  avisar('calibracao');
+}
+
+export function definirArmazenamentoVoz(armazenamento) {
+  calib.armazenamento = armazenamento;
+  if (entradaStream) carregarPerfilDoMic(entradaStream.getAudioTracks()[0]?.label || '');
+}
+
+export function estadoCalibracao() {
+  return {
+    mic: calib.mic,
+    perfil: calib.perfil || null,
+    coletando: calib.modo,
+    segundos: calib.coletor ? Math.round(calib.coletor.segundos) : 0,
+    alvo: calib.modo === 'auto' ? SEGUNDOS_AUTO : 10,
+    temAmostra: Boolean(calib.ultimaAmostra?.length),
+  };
+}
+
+// "Calibrar agora" (Settings): junta `segundos` de voz e devolve o perfil (sem salvar ainda)
+export function calibrarAgora(segundos, aoProgresso) {
+  return new Promise((pronto) => {
+    iniciarColeta('manual');
+    const c = calib.coletor;
+    const relogio = setInterval(() => {
+      if (calib.coletor !== c) {
+        clearInterval(relogio);
+        return pronto(null);
+      }
+      aoProgresso?.(Math.min(1, c.segundos / segundos));
+      if (c.segundos >= segundos) {
+        clearInterval(relogio);
+        const perfil = c.calcular();
+        calib.ultimaAmostra = c.amostra();
+        pararColeta();
+        pronto(perfil);
+      }
+    }, 100);
+  });
+}
+export function cancelarCalibracao() {
+  if (calib.modo === 'manual') pararColeta();
+}
+
+export async function apagarPerfil() {
+  calib.perfil = null;
+  aplicarEq(EQ_PADRAO, true);
+  try { localStorage.removeItem('herald-voz-' + calib.mic); } catch {}
+  try { await calib.armazenamento?.apagar(calib.mic); } catch {}
+  avisar('calibracao');
+}
+
+// Antes/depois: passa o trecho guardado pela cadeia (sem a IA, que já foi aplicada nele)
+// com o EQ padrão e com o EQ do perfil. Devolve dois AudioBuffers pra tocar.
+export async function previaCalibracao(perfil) {
+  const amostra = calib.ultimaAmostra;
+  if (!amostra?.length) return null;
+  const renderizar = async (eq) => {
+    const ctx = new OfflineAudioContext(1, amostra.length, 48000);
+    await ctx.audioWorklet.addModule('dist/audio/dinamica.js');
+    const buf = new AudioBuffer({ length: amostra.length, sampleRate: 48000, numberOfChannels: 1 });
+    buf.copyToChannel(amostra, 0);
+    const src = new AudioBufferSourceNode(ctx, { buffer: buf });
+    let atual = src.connect(new BiquadFilterNode(ctx, { type: 'highpass', frequency: eq.graves, Q: 0.7 }));
+    for (const b of eq.bandas) atual = atual.connect(new BiquadFilterNode(ctx, { type: b.tipo, frequency: b.freq, gain: b.ganho, Q: b.q }));
+    atual.connect(new AudioWorkletNode(ctx, 'dinamica', { channelCount: 1, channelCountMode: 'explicit', processorOptions: DINAMICA })).connect(ctx.destination);
+    src.start();
+    return ctx.startRendering();
+  };
+  return { antes: await renderizar(EQ_PADRAO), depois: await renderizar(eqDoPerfil(perfil)) };
+}
+
 export function configurarAudio(mudancas) {
-  const precisaRecapturar = 'eco' in mudancas && mudancas.eco !== audio.eco;
+  // eco e volume automático são do Chrome: mudam na captura do microfone
+  const precisaRecapturar = ('eco' in mudancas && mudancas.eco !== audio.eco) || ('auto' in mudancas && mudancas.auto !== audio.auto);
   Object.assign(audio, mudancas);
   guardar('herald-audio', JSON.stringify({ ruido: audio.ruido, forca: audio.forca, auto: audio.auto, ganho: audio.ganho, eco: audio.eco }));
   if (!cadeia) return;
@@ -250,10 +425,11 @@ export async function abrirMicrofone(deviceId = ler('herald-mic') || '') {
   const novo = await navigator.mediaDevices.getUserMedia({
     audio: {
       deviceId: deviceId ? { exact: deviceId } : undefined,
-      // O cancelamento de eco do navegador fica (opcional); ruído e ganho são nossos
+      // Tratamento do Chrome (WebRTC): ruído constante + volume automático; eco opcional
+      // (com fone fica melhor desligado). Estalo/teclado quem tira é o porteiro.
       echoCancellation: audio.eco,
-      noiseSuppression: false,
-      autoGainControl: false,
+      noiseSuppression: true,
+      autoGainControl: audio.auto,
       channelCount: 1,
       sampleRate: 48000,
     },
@@ -265,9 +441,9 @@ export async function abrirMicrofone(deviceId = ler('herald-mic') || '') {
   fonte = cadeia.ctx.createMediaStreamSource(novo);
   fonte.connect(cadeia.graves);
   if (deviceId) guardar('herald-mic', deviceId);
+  carregarPerfilDoMic(novo.getAudioTracks()[0].label || '');
   return voz.micStream;
 }
-
 export function microfoneAtual() {
   return entradaDispositivo || '';
 }

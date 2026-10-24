@@ -6,17 +6,27 @@
 
 const db = (v) => 10 ** (v / 20);
 
+// Ajustes (todos opcionais; os padrões são os da versão atual do app)
+const PADRAO_NIVELADOR = { alvo: -22, minimo: -12, maximo: 18, silencio: -55, acimaDoChao: 12, sobe: 1.5, desce: 0.12 };
+
 class Nivelador extends AudioWorkletProcessor {
-  constructor() {
+  constructor(opcoes) {
     super();
-    this.alvo = db(-22); // volume médio da fala (folga de sobra pros picos)
-    this.minimo = db(-12);
-    this.maximo = db(18);
-    this.silencio = db(-55); // abaixo disso nem conta
+    this.configurar({ ...PADRAO_NIVELADOR, ...opcoes?.processorOptions });
     this.media = 1e-6; // média quadrática (energia)
     this.chao = db(-60); // estimativa do ruído de fundo
     this.ganho = 1;
     this.blocos = 0;
+    this.port.onmessage = (e) => e.data?.tipo === 'config' && this.configurar({ ...this.ajustes, ...e.data.valores });
+  }
+
+  configurar(a) {
+    this.ajustes = a;
+    this.alvo = db(a.alvo); // volume médio da fala (folga de sobra pros picos)
+    this.minimo = db(a.minimo);
+    this.maximo = db(a.maximo);
+    this.silencio = db(a.silencio); // abaixo disso nem conta
+    this.acimaDoChao = db(a.acimaDoChao); // quanto a voz precisa estar acima do ruído
   }
 
   process(entradas, saidas) {
@@ -35,10 +45,10 @@ class Nivelador extends AudioWorkletProcessor {
     const tempoChao = rms < this.chao ? 0.5 : 8;
     this.chao += (rms - this.chao) * (1 - Math.exp(-dt / tempoChao));
 
-    const temVoz = rms > this.silencio && rms > this.chao * db(12);
+    const temVoz = rms > this.silencio && rms > this.chao * this.acimaDoChao;
     let desejado = this.ganho;
     if (temVoz) desejado = Math.min(this.maximo, Math.max(this.minimo, this.alvo / rms));
-    const tempo = desejado < this.ganho ? 0.12 : 1.5;
+    const tempo = desejado < this.ganho ? this.ajustes.desce : this.ajustes.sobe;
     const novo = this.ganho + (desejado - this.ganho) * (1 - Math.exp(-dt / tempo));
 
     // ganho interpolado amostra a amostra (sem degraus/estalos)

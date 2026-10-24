@@ -9,19 +9,17 @@
 const paraDb = (v) => 20 * Math.log10(v + 1e-12);
 const deDb = (d) => 10 ** (d / 20);
 
+// Ajustes (todos opcionais; os padrões são os da versão atual do app). Tempos em ms.
+// detector: 'pico' (segue cada pico) ou 'rms' (segue o volume médio — mais natural pra voz)
+// portao: abaixo disso (dB) o som é abaixado (expansor 1:3, até 'profundidade' dB) — pausas e respiração ficam quietas; -100 = desligado
+const PADRAO_DINAMICA = { comprimir: true, detector: 'pico', limiar: -26, razao: 2.5, joelho: 10, ganho: 3, ataque: 8, soltura: 200, teto: -1, portao: -100, profundidade: 15 };
+
 class Dinamica extends AudioWorkletProcessor {
-  constructor() {
+  constructor(opcoes) {
     super();
-    // Compressor
-    this.limiar = -26;
-    this.razao = 2.5;
-    this.joelho = 10;
-    this.saidaComp = deDb(3); // ganho fixo depois de comprimir
-    this.ataque = Math.exp(-1 / (0.008 * sampleRate));
-    this.soltura = Math.exp(-1 / (0.2 * sampleRate));
+    this.configurar({ ...PADRAO_DINAMICA, ...opcoes?.processorOptions });
+    this.port.onmessage = (e) => e.data?.tipo === 'config' && this.configurar({ ...this.ajustes, ...e.data.valores });
     this.envelope = 0;
-    // Limitador
-    this.teto = deDb(-1);
     this.antecipacao = Math.round(0.004 * sampleRate);
     this.atraso = new Float32Array(this.antecipacao);
     this.posicao = 0;
@@ -30,6 +28,19 @@ class Dinamica extends AudioWorkletProcessor {
     this.rampa = 0; // amostras ainda descendo
     this.segurar = 0; // amostras parado no nível baixo (até o pico passar)
     this.solturaLim = 1 - Math.exp(-1 / (0.08 * sampleRate));
+  }
+
+  configurar(a) {
+    this.ajustes = a;
+    // Compressor
+    this.limiar = a.limiar;
+    this.razao = a.comprimir ? a.razao : 1;
+    this.joelho = a.joelho;
+    this.saidaComp = deDb(a.comprimir ? a.ganho : 0); // ganho fixo depois de comprimir
+    this.ataque = Math.exp(-1 / ((a.ataque / 1000) * sampleRate));
+    this.soltura = Math.exp(-1 / ((a.soltura / 1000) * sampleRate));
+    // Limitador
+    this.teto = deDb(a.teto);
   }
 
   reducao(nivelDb) {
@@ -50,10 +61,15 @@ class Dinamica extends AudioWorkletProcessor {
     for (let i = 0; i < entrada.length; i++) {
       // --- compressor (detector de pico com ataque/soltura) ---
       const x = entrada[i];
-      const nivel = Math.abs(x);
+      const rms = this.ajustes.detector === 'rms';
+      const nivel = rms ? x * x : Math.abs(x);
       const coef = nivel > this.envelope ? this.ataque : this.soltura;
       this.envelope = coef * this.envelope + (1 - coef) * nivel;
-      const comprimido = x * deDb(this.reducao(paraDb(this.envelope))) * this.saidaComp;
+      const medido = rms ? Math.sqrt(this.envelope) : this.envelope;
+      const nivelDb = paraDb(medido);
+      let reducao = this.reducao(nivelDb);
+      if (nivelDb < this.ajustes.portao) reducao -= Math.min(this.ajustes.profundidade, (this.ajustes.portao - nivelDb) * 2);
+      const comprimido = x * deDb(reducao) * this.saidaComp;
 
       // --- limitador com antecipação ---
       const precisa = Math.min(1, this.teto / (Math.abs(comprimido) + 1e-12));

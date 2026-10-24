@@ -28,6 +28,6 @@ if (typeof globalThis.crypto === 'undefined') {
 `;
 fs.writeFileSync(path.join(destino, 'deepfilter.js'), substitutos + fs.readFileSync(path.join(dfn, 'worklet.js'), 'utf8'));
 fs.copyFileSync(path.join(dfn, 'df_bg.wasm'), path.join(destino, 'deepfilter.wasm'));
-for (const arquivo of ['nivelador.js', 'dinamica.js']) {
+for (const arquivo of ['nivelador.js', 'dinamica.js', 'gravador.js', 'ia-ponte.js', 'ia-worker.js']) {
   fs.copyFileSync(path.join(raiz, 'src', 'renderer', 'audio', arquivo), path.join(destino, arquivo));
 }

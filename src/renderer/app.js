@@ -235,6 +235,12 @@ async function carregarConta(user) {
   }
   est.eu = perfil;
   est.perfis.set(perfil.id, perfil);
+  // calibração da voz fica na conta: por pessoa e por microfone
+  chamada.definirArmazenamentoVoz({
+    ler: async (mic) => (await sb.from('voice_profiles').select('profile').eq('user_id', est.eu.id).eq('mic', mic).maybeSingle()).data?.profile ?? null,
+    gravar: (mic, perfil) => sb.from('voice_profiles').upsert({ user_id: est.eu.id, mic, profile: perfil, updated_at: new Date().toISOString() }),
+    apagar: (mic) => sb.from('voice_profiles').delete().eq('user_id', est.eu.id).eq('mic', mic),
+  });
   await carregarEstrutura();
   assinarBanco();
   mostrarTela('app');
@@ -855,6 +861,8 @@ chamada.aoMudar((tipo, dados) => {
   }
   if (tipo === 'stats') return atualizarStats(dados);
   if (tipo === 'roleta') return roleta.receber(dados);
+  if (tipo === 'calibrado') return aviso(t('Your mic is now calibrated ✓ Hear the difference in Settings → Audio'));
+  if (tipo === 'calibracao') return $('#dlg-config').open && renderCalibracao();
   if (tipo === 'radio') return radio.receber(dados);
   if (tipo === 'chegou') return radio.chegou(dados);
   if (tipo === 'eu') radio.atualizarSom();
@@ -1689,9 +1697,11 @@ $('#btn-config').onclick = async () => {
   seletorMic.definir(lista('audioinput'), ler('herald-mic') || 'default');
   seletorSaida.definir(lista('audiooutput'), chamada.saidaAtual() || 'default');
   atualizarOpcoesAudio();
+  renderCalibracao();
   $('#chk-esconder-ip').checked = chamada.esconderIp();
   atualizarAvisoRede();
   $('#dlg-config').showModal();
+  document.activeElement?.blur(); // sem contorno de foco no primeiro botão ao abrir
 
   // Medidor em dB (-60 a 0); a marquinha é o volume ideal da fala (-18 dB)
   medidor = setInterval(() => {
@@ -1699,14 +1709,164 @@ $('#btn-config').onclick = async () => {
     $('#medidor-barra').style.width = `${Math.max(0, Math.min(100, ((db + 60) / 60) * 100))}%`;
     $('#medidor-barra').classList.toggle('alto', db > -6);
     const g = Math.round(chamada.audio.ganhoAuto);
-    $('#medidor-info').textContent = chamada.audio.auto ? t('Auto volume: {db}', { db: `${g > 0 ? '+' : ''}${g} dB` }) : '';
+    void g; // o volume automático agora é o do Chrome (não dá pra ler o ganho dele)
+    $('#medidor-info').textContent = '';
   }, 70);
 };
 
 $('#dlg-config').addEventListener('close', () => {
   clearInterval(medidor);
   pararTeste();
+  chamada.cancelarCalibracao();
+  calibNova = null;
+  previaCalib.parar();
 });
+
+// ================= Calibração da voz (Settings → Audio) =================
+
+const PERGUNTAS = [
+  'What game have you played the most this week? Tell us about it.',
+  'Tell us about the last good movie or series you watched.',
+  'If you could eat anything right now, what would it be? Why?',
+  'Describe your setup: what is on your desk right now?',
+  'What was the best thing that happened to you this week?',
+];
+let calibNova = null; // perfil recém-calculado no "Calibrar agora", esperando salvar
+let calibProgresso = null; // 0..1 enquanto grava
+let calibPergunta = '';
+
+// Toca o antes/depois juntos e alterna entre eles sem parar (A/B)
+const previaCalib = (() => {
+  let ctx = null, fontes = [], ganhos = null, qual = 'depois', tocando = false;
+  return {
+    async tocar(buffers, lado) {
+      this.parar();
+      ctx ??= new AudioContext({ sampleRate: 48000 });
+      if (chamada.saidaAtual()) ctx.setSinkId?.(chamada.saidaAtual()).catch(() => {});
+      qual = lado;
+      ganhos = {};
+      for (const k of ['antes', 'depois']) {
+        const g = new GainNode(ctx, { gain: k === lado ? 1 : 0 });
+        const f = new AudioBufferSourceNode(ctx, { buffer: buffers[k] });
+        f.connect(g).connect(ctx.destination);
+        f.start(ctx.currentTime + 0.05);
+        f.onended = () => { tocando = false; renderCalibracao(); };
+        fontes.push(f);
+        ganhos[k] = g;
+      }
+      tocando = true;
+    },
+    trocar(lado) {
+      qual = lado;
+      if (!ganhos) return;
+      for (const [k, g] of Object.entries(ganhos)) g.gain.setTargetAtTime(k === lado ? 1 : 0, ctx.currentTime, 0.01);
+    },
+    parar() {
+      for (const f of fontes) { f.onended = null; try { f.stop(); } catch {} }
+      fontes = [];
+      ganhos = null;
+      tocando = false;
+    },
+    get lado() { return qual; },
+    get tocando() { return tocando; },
+  };
+})();
+
+function renderCalibracao() {
+  const el = $('#calib-cartao');
+  if (!el) return;
+  const e = chamada.estadoCalibracao();
+  // gravando o "Calibrar agora"
+  if (calibProgresso !== null) {
+    el.innerHTML = `<p class="calib-pergunta">${esc(t(calibPergunta))}</p>
+      <div class="medidor"><div class="calib-barra" style="width:${Math.round(calibProgresso * 100)}%"></div></div>
+      <div class="calib-linha"><span class="texto-3">${esc(t('Talk normally, like in a call. It only counts while you speak.'))}</span><button class="link" data-calib="cancelar">${esc(t('Cancel'))}</button></div>`;
+    return;
+  }
+  const perfil = calibNova || e.perfil;
+  const tom = perfil?.tom || 0;
+  const tons = [[-1, 'Warmer'], [0, 'Natural'], [1, 'Brighter']];
+  const ab = (e.temAmostra && perfil)
+    ? `<div class="calib-linha">
+        <div class="segmentado calib-ab">${['antes', 'depois'].map((k) => `<button data-calib-ab="${k}" class="${previaCalib.tocando && previaCalib.lado === k ? 'ligado' : ''}">${esc(t(k === 'antes' ? 'Before' : 'After'))}</button>`).join('')}</div>
+        <span class="texto-3">${esc(t('Plays your voice from the calibration. Switch while it plays.'))}</span>
+      </div>` : '';
+  const tomHtml = perfil
+    ? `<div class="calib-linha"><span class="calib-rotulo">${esc(t('Tone'))}</span><div class="segmentado">${tons.map(([v, n]) => `<button data-calib-tom="${v}" class="${tom === v ? 'ligado' : ''}">${esc(t(n))}</button>`).join('')}</div></div>` : '';
+  if (calibNova) {
+    el.innerHTML = `<p class="calib-status"><b>${esc(t('Done! Compare before and after.'))}</b></p>${ab}${tomHtml}
+      <div class="calib-linha calib-acoes"><button class="botao-primario" data-calib="salvar">${esc(t('Save calibration'))}</button><button class="botao-secundario" data-calib="descartar">${esc(t('Discard'))}</button></div>`;
+    return;
+  }
+  const status = e.perfil
+    ? `${icone('certo')}<span>${esc(t('Calibrated for {mic}', { mic: e.mic }))}</span>`
+    : e.coletando === 'auto'
+      ? `<span>${esc(t('Calibrating automatically in your next call — {s} of {alvo} s of voice', { s: e.segundos, alvo: e.alvo }))}</span>`
+      : `<span>${esc(t('Not calibrated yet for {mic}. It happens automatically in your next call.', { mic: e.mic || t('your microphone') }))}</span>`;
+  el.innerHTML = `<p class="calib-status ${e.perfil ? 'ok' : ''}">${status}</p>${ab}${tomHtml}
+    <div class="calib-linha calib-acoes">
+      <button class="botao-secundario" data-calib="agora">${esc(t(e.perfil ? 'Calibrate again' : 'Calibrate now'))}</button>
+      ${e.perfil ? `<button class="link calib-reset" data-calib="apagar">${esc(t('Reset'))}</button>` : ''}
+    </div>`;
+}
+
+$('#calib-cartao').addEventListener('click', async (ev) => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  const acao = b.dataset.calib;
+  if (acao === 'agora') {
+    previaCalib.parar();
+    calibPergunta = PERGUNTAS[Math.floor(Math.random() * PERGUNTAS.length)];
+    calibProgresso = 0;
+    renderCalibracao();
+    const perfil = await chamada.calibrarAgora(10, (p) => { calibProgresso = p; renderCalibracao(); });
+    calibProgresso = null;
+    calibNova = perfil;
+    renderCalibracao();
+    if (perfil) tocarPrevia('depois');
+  }
+  if (acao === 'cancelar') {
+    chamada.cancelarCalibracao();
+    calibProgresso = null;
+    renderCalibracao();
+  }
+  if (acao === 'salvar') {
+    previaCalib.parar();
+    await chamada.salvarPerfil(calibNova, true);
+    calibNova = null;
+    aviso(t('Saved!'));
+    renderCalibracao();
+  }
+  if (acao === 'descartar') {
+    previaCalib.parar();
+    calibNova = null;
+    renderCalibracao();
+  }
+  if (acao === 'apagar' && (await confirmar(t('Reset the calibration for this microphone? It will calibrate again in your next call.')))) {
+    await chamada.apagarPerfil();
+    renderCalibracao();
+  }
+  if (b.dataset.calibAb) {
+    if (previaCalib.tocando) previaCalib.trocar(b.dataset.calibAb);
+    else tocarPrevia(b.dataset.calibAb);
+    renderCalibracao();
+  }
+  if (b.dataset.calibTom) {
+    const tom = Number(b.dataset.calibTom);
+    if (calibNova) calibNova = { ...calibNova, tom };
+    else await chamada.salvarPerfil({ ...chamada.estadoCalibracao().perfil, tom });
+    if (previaCalib.tocando) tocarPrevia(previaCalib.lado);
+    renderCalibracao();
+  }
+});
+
+async function tocarPrevia(lado) {
+  const perfil = calibNova || chamada.estadoCalibracao().perfil;
+  const buffers = await chamada.previaCalibracao(perfil);
+  if (!buffers) return;
+  await previaCalib.tocar(buffers, lado);
+  renderCalibracao();
+}
 
 $('#chk-ruido').onchange = (e) => {
   chamada.configurarAudio({ ruido: e.target.checked });

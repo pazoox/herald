@@ -1,13 +1,13 @@
 {
   "name": "herald",
   "productName": "Herald",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Voz e compartilhamento de tela pra jogar com os amigos",
   "author": "Herald",
   "main": "src/main.js",
   "scripts": {
-    "ui": "node scripts/copiar-audio.js && esbuild src/renderer/app.js --bundle --format=iife --target=chrome140 --outdir=src/renderer/dist --loader:.woff2=file --loader:.woff=file --asset-names=[name]",
+    "ui": "node scripts/copiar-audio.js && esbuild src/renderer/app.js src/renderer/lab.js --bundle --format=iife --target=chrome140 --outdir=src/renderer/dist --loader:.woff2=file --loader:.woff=file --asset-names=[name]",
     "start": "npm run ui && electron .",
     "mascote": "node scripts/mascote.js",
     "dist": "npm run ui && electron-builder --win --publish never"

@@ -31,6 +31,7 @@ if (process.defaultApp) {
 }
 
 let janela;
+const LAB = Boolean(process.env.HERALD_LAB);
 let fontes = new Map(); // id -> DesktopCapturerSource (da última listagem)
 let escolha = null; // { id, audio } — o que a pessoa escolheu no seletor
 let conviteGuardado = acharConvite(process.argv); // convite que abriu o app
@@ -171,7 +172,9 @@ function criarJanela() {
 
   // HERALD_DEMO=1 (ou =chat) abre com dados de mentira, pra prints
   const demo = process.env.HERALD_DEMO;
-  janela.loadURL(demo ? `app://herald/index.html?demo=${encodeURIComponent(demo)}` : 'app://herald/index.html');
+  // HERALD_LAB=1 abre o Audio Lab (ferramenta de desenvolvimento pra ajustar o som da voz)
+  if (LAB) janela.loadURL('app://herald/lab.html');
+  else janela.loadURL(demo ? `app://herald/index.html?demo=${encodeURIComponent(demo)}` : 'app://herald/index.html');
   janela.once('ready-to-show', () => {
     if (inicial.maximizada) janela.maximize();
     janela.show();
@@ -277,6 +280,23 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('versao', () => app.getVersion());
+
+  // Audio Lab: salva os WAVs de cada etapa em Documentos\Herald Audio Lab\<data-hora>
+  if (LAB) {
+    const pastaLab = path.join(app.getPath('documents'), 'Herald Audio Lab');
+    let ultima = pastaLab;
+    ipcMain.handle('lab-salvar', (_e, arquivos) => {
+      const quando = new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '-');
+      ultima = path.join(pastaLab, quando);
+      fs.mkdirSync(ultima, { recursive: true });
+      for (const { nome, dados } of arquivos) fs.writeFileSync(path.join(ultima, path.basename(String(nome))), Buffer.from(dados));
+      return ultima;
+    });
+    ipcMain.handle('lab-abrir-pasta', () => {
+      fs.mkdirSync(ultima, { recursive: true });
+      shell.openPath(ultima);
+    });
+  }
 
   // Rádio: transforma o que a pessoa colou (link ou nome da música) numa faixa tocável
   ipcMain.handle('radio-buscar', async (_e, texto) => {

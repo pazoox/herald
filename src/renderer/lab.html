@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self'">
+  <title>Herald — Audio Lab</title>
+  <link rel="stylesheet" href="dist/app.css">
+  <link rel="stylesheet" href="dist/lab.css">
+</head>
+<!-- Audio Lab: ferramenta de desenvolvimento (HERALD_LAB=1). Grava a voz uma vez e
+     processa a mesma gravação pela cadeia do Herald com ajustes diferentes, etapa por etapa. -->
+<body class="lab">
+  <div class="barra-titulo"></div>
+  <header class="lab-topo">
+    <img src="marca/herald.svg" alt="">
+    <div>
+      <h1>Audio Lab</h1>
+      <p>Grave 10 s, compare cada etapa da cadeia e ajuste. Use fone.</p>
+    </div>
+  </header>
+
+  <main class="lab-grade">
+    <section class="lab-esquerda">
+      <!-- Gravação -->
+      <div class="lab-cartao">
+        <div class="lab-linha">
+          <div class="seletor lab-mic" id="sel-mic"></div>
+          <button class="botao-primario" id="btn-gravar">Gravar 10 s</button>
+          <label class="botao-secundario lab-importar">Importar WAV<input type="file" id="arquivo" accept="audio/*" hidden></label>
+        </div>
+        <label class="alternador lab-eco">
+          <input type="checkbox" id="chk-eco">
+          <span class="trilha"></span>
+          <span>Cancelamento de eco do navegador na gravação <small>como no app hoje (vem ligado). Desligue pra ouvir o mic cru.</small></span>
+        </label>
+        <label class="alternador lab-eco">
+          <input type="checkbox" id="chk-chrome">
+          <span class="trilha"></span>
+          <span>Tratamento do Chrome na gravação <small>ruído + volume automático do WebRTC (o do Google Meet). Ligue e use o botão "Modo sólido".</small></span>
+        </label>
+        <p class="lab-status" id="status">Grave uma frase falando normal, como numa call. Dica: inclua um "s" forte e uma risada.</p>
+      </div>
+
+      <!-- Etapas + player -->
+      <div class="lab-cartao">
+        <div class="lab-etapas" id="etapas"></div>
+        <canvas id="onda" class="lab-onda" width="1400" height="160"></canvas>
+        <div class="lab-linha lab-player">
+          <button class="radio-play" id="btn-tocar" disabled></button>
+          <span class="lab-tempo" id="tempo">0:00.0</span>
+          <label class="alternador lab-mini"><input type="checkbox" id="chk-loop" checked><span class="trilha"></span><span>Loop</span></label>
+          <span class="lab-dica">Teclas <kbd>1</kbd>–<kbd>6</kbd> trocam de etapa sem parar o som · <kbd>Espaço</kbd> toca/pausa</span>
+        </div>
+      </div>
+
+      <!-- Espectro -->
+      <div class="lab-cartao">
+        <div class="lab-linha lab-espectro-topo">
+          <b>Espectro médio da voz</b>
+          <span class="lab-legenda"><i class="cor-cru"></i>Cru <i class="cor-sel"></i>Etapa escolhida <i class="cor-final"></i>Final</span>
+        </div>
+        <canvas id="espectro" class="lab-espectro" width="1400" height="360"></canvas>
+      </div>
+    </section>
+
+    <!-- Ajustes -->
+    <section class="lab-direita">
+      <div class="lab-ajustes" id="ajustes"></div>
+      <div class="lab-acoes">
+        <label class="alternador"><input type="checkbox" id="chk-aovivo"><span class="trilha"></span><span>Ouvir ao vivo <small>seu mic passando por estes ajustes (só com fone!)</small></span></label>
+        <div class="lab-linha">
+          <button class="botao-primario" id="btn-proposta">Proposta nova</button>
+          <button class="botao-primario" id="btn-solido">Modo sólido</button>
+          <button class="botao-secundario" id="btn-padrao">Som de hoje</button>
+          <button class="botao-secundario" id="btn-copiar">Copiar ajustes</button>
+        </div>
+        <div class="lab-linha">
+          <button class="botao-primario" id="btn-exportar" disabled>Exportar WAVs</button>
+          <button class="botao-secundario" id="btn-pasta">Abrir pasta</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="dist/lab.js"></script>
+</body>
+</html>
