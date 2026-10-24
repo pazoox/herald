@@ -101,7 +101,7 @@ const PT = {
   'sharp text': 'texto nítido',
   'weak internet': 'internet fraca',
   'PC audio': 'Som do PC',
-  "includes your friends' voices — best for videos": 'inclui a voz da galera — melhor pra vídeos',
+  "games, videos, music — Herald's own sounds stay out": 'jogo, vídeo, música — o som do Herald fica de fora',
 
   // Configurações
   'Settings': 'Configurações',

@@ -910,7 +910,12 @@ function atualizarVideo(el, d) {
         </div>
       </div>
       <div class="em-janela"><span>${esc(t('Watching in another window'))}</span><button data-trazer>${esc(t('Bring it back'))}</button></div>`;
-    if (!d.local) el.querySelector('video').volume = volumeTela(d.userId);
+    if (!d.local) {
+      const v = el.querySelector('video');
+      v.volume = volumeTela(d.userId);
+      // o som da tela sai no mesmo fone/caixa escolhido pras vozes
+      if (chamada.saidaAtual()) v.setSinkId?.(chamada.saidaAtual()).catch(() => {});
+    }
   }
   el.dataset.peer = d.peerId || 'eu';
   el.dataset.usuarioTela = d.userId;

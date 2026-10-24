@@ -51,7 +51,7 @@ function iniciarAtualizador() {
   ipcMain.handle('instalar-atualizacao', () => autoUpdater.quitAndInstall(true, true));
   const procurar = () => autoUpdater.checkForUpdates().catch(() => {});
   setTimeout(procurar, 5000);
-  setInterval(procurar, 2 * 60 * 60 * 1000); // de 2 em 2 horas
+  setInterval(procurar, 15 * 60 * 1000); // de 15 em 15 minutos
 }
 
 const ARQUIVO_SESSAO = () => path.join(app.getPath('userData'), 'sessao.bin');

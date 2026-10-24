@@ -331,7 +331,10 @@ export async function entrar({ canalId, chave, userId, turn = [] }) {
     const p = voz.participantes.get(id);
     if (!p) return;
     if (metadata?.tipo === 'tela') {
-      p.telaStream = stream;
+      // junta vídeo e som da tela num stream só, mesmo se chegarem separados
+      if (!p.telaStream || p.telaStream.getTracks().every((t) => t.readyState === 'ended')) p.telaStream = new MediaStream();
+      for (const t of p.telaStream.getTracks()) if (t.kind === track.kind && t !== track) p.telaStream.removeTrack(t);
+      if (!p.telaStream.getTracks().includes(track)) p.telaStream.addTrack(track);
       avisar('participantes');
       return;
     }
@@ -465,6 +468,8 @@ export function definirSaida(deviceId) {
   guardar('herald-saida', deviceId);
   for (const p of voz.participantes.values()) p.audioEl?.setSinkId?.(deviceId).catch(() => {});
   testeAudio?.setSinkId?.(deviceId).catch(() => {});
+  // o som das telas também sai no dispositivo escolhido
+  for (const v of document.querySelectorAll('video[data-remoto]')) v.setSinkId?.(deviceId).catch(() => {});
 }
 
 export function saidaAtual() {
@@ -484,7 +489,15 @@ export async function iniciarTela(fonteId, qualidadeId, comAudio) {
         height: { ideal: q.h, max: q.h },
         frameRate: { ideal: q.fps, max: q.fps },
       },
-      audio: comAudio,
+      // som do PC "cru" (os filtros de voz estragam música/jogo) e sem o som
+      // do próprio Herald, pra voz da galera não voltar pra eles
+      audio: comAudio && {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 2,
+        restrictOwnAudio: true,
+      },
     });
   } catch (err) {
     console.error(err);
