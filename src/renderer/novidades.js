@@ -3,6 +3,35 @@
 
 export const NOVIDADES = [
   {
+    versao: '1.5.0',
+    en: {
+      novas: [
+        'New side panel: collapsed by default, with rings showing who is online, the Radio song progress and how your PC is doing. Click a ring to open it.',
+        'System tab: see how your screen share is doing (fps, what is limiting it, video card or CPU) and how your PC and connection are holding up.',
+        'Radio tab: the player moves into the side panel with the queue always open. The Radio ring only shows up while the Radio is on.',
+        'This window: from now on Herald shows what is new after every update.',
+      ],
+      correcoes: [
+        'Settings: the page title stays in place while you scroll.',
+        'Role picker in Edit Nest now matches the rest of the app.',
+        'Voice calibration now just asks you to speak like you would in a call.',
+      ],
+    },
+    pt: {
+      novas: [
+        'Painel lateral novo: vem recolhido, com anéis mostrando quem está online, o progresso da música do Rádio e como está o seu PC. Clique num anel pra abrir.',
+        'Aba Sistema: veja como está a sua transmissão (fps, o que está limitando, placa de vídeo ou CPU) e como estão o seu PC e a conexão.',
+        'Aba Rádio: o player vai pro painel lateral com a fila sempre aberta. O anel do Rádio só aparece quando o Rádio está ligado.',
+        'Esta janela: a partir de agora o Herald mostra as novidades a cada atualização.',
+      ],
+      correcoes: [
+        'Settings: o título da página fica fixo enquanto você rola.',
+        'A escolha de cargo no Edit Nest agora tem o visual do app.',
+        'A calibração da voz agora só pede pra você falar como falaria numa call.',
+      ],
+    },
+  },
+  {
     versao: '1.4.0',
     en: {
       novas: [

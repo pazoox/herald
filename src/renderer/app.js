@@ -2171,7 +2171,7 @@ function montarDemo() {
   est.vozVista = 'c-ranked';
   est.vista = new URLSearchParams(location.search).get('demo') === 'chat' ? 'texto' : 'voz';
   render();
-  if (new URLSearchParams(location.search).get('novidades')) setTimeout(() => abrirNovidades(new URLSearchParams(location.search).get('novidades'), '1.4.0'), 600);
+  if (new URLSearchParams(location.search).get('novidades')) setTimeout(() => abrirNovidades(new URLSearchParams(location.search).get('novidades'), '1.5.0'), 600);
   const yt = (id, titulo, autor, por) => ({ uid: id, tipo: 'youtube', id, titulo, autor, por, capa: `https://i.ytimg.com/vi/${id}/mqdefault.jpg` });
   radio.demo([
     yt('fJ9rUzIMcZQ', 'Queen – Bohemian Rhapsody (Official Video Remastered)', 'Queen Official', 'u-lu'),
