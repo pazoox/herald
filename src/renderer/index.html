@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: mediastream:; connect-src 'self' wss: https:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: mediastream:; connect-src 'self' wss: https:; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://w.soundcloud.com">
   <title>Herald</title>
   <link rel="stylesheet" href="dist/app.css">
 </head>
@@ -327,6 +327,39 @@
       <button id="btn-sair-conta" class="botao-perigo" data-i18n>Sign out</button>
     </div>
   </dialog>
+
+  <!-- Rádio: player flutuante (fila compartilhada com a chamada) -->
+  <section id="radio" class="radio" hidden>
+    <header class="radio-topo" id="radio-topo">
+      <span class="radio-marca"><span data-icone="radio"></span><b data-i18n>Radio</b></span>
+      <button class="botao-icone pequeno" id="radio-recolher"></button>
+      <button class="botao-icone pequeno" id="radio-fechar" data-i18n-tip="Close the Radio for me"><span data-icone="x"></span></button>
+    </header>
+    <div class="radio-tela" id="radio-tela"></div>
+    <div class="radio-agora">
+      <img id="radio-capa" alt="">
+      <div class="radio-agora-texto">
+        <b id="radio-titulo"></b>
+        <small id="radio-autor"></small>
+      </div>
+    </div>
+    <div class="radio-progresso" id="radio-progresso">
+      <div class="radio-trilho"><i id="radio-barra"></i></div>
+      <span id="radio-tempo"></span>
+    </div>
+    <div class="radio-controles">
+      <button class="radio-play" id="radio-play"></button>
+      <button class="botao-icone" id="radio-pular" data-i18n-tip="Skip"><span data-icone="pular"></span></button>
+      <label class="radio-vol"><span id="radio-vol-icone"></span><input type="range" id="radio-vol" min="0" max="100" step="1"></label>
+      <button class="botao-icone radio-ver-fila" id="radio-ver-fila" data-i18n-tip="Queue"><span data-icone="fila"></span><small id="radio-qtd"></small></button>
+    </div>
+    <div class="radio-fila" id="radio-fila" hidden></div>
+    <form class="radio-adicionar" id="radio-form">
+      <input id="radio-busca" autocomplete="off" spellcheck="false" data-i18n-placeholder="Paste a YouTube or SoundCloud link, or type a song">
+      <button class="botao-primario" id="radio-add" data-i18n-tip="Add to queue"><span data-icone="mais"></span></button>
+    </form>
+    <p class="radio-erro" id="radio-erro"></p>
+  </section>
 
   <script src="dist/app.js"></script>
 </body>

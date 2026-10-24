@@ -9,6 +9,7 @@ import { t, traduzirPagina, mudarIdioma, idiomaAtual, IDIOMAS, quando, horaCurta
 import * as chamada from './voz.js';
 import { criarSeletor } from './seletor.js';
 import { criarRoleta } from './roleta.js';
+import { criarRadio } from './radio.js';
 
 const { voz } = chamada;
 const $ = (s, el = document) => el.querySelector(s);
@@ -783,6 +784,10 @@ chamada.aoMudar((tipo, dados) => {
   }
   if (tipo === 'stats') return atualizarStats(dados);
   if (tipo === 'roleta') return roleta.receber(dados);
+  if (tipo === 'radio') return radio.receber(dados);
+  if (tipo === 'chegou') return radio.chegou(dados);
+  if (tipo === 'eu') radio.atualizarSom();
+  if (tipo === 'conexao' && !voz.conectado) radio.desligar();
   if (tipo === 'eu' || tipo === 'conexao') anunciarPresenca();
   renderUsuario();
   renderCanais();
@@ -983,13 +988,22 @@ const roleta = criarRoleta({
   aviso,
 });
 
+const radio = criarRadio({
+  eu: () => est.eu.id,
+  nomeDe,
+  enviar: (estado, peerId) => chamada.enviarRadio(estado, peerId),
+  mudo: () => voz.surdo,
+  aviso,
+  buscar: (texto) => window.herald.radioBuscar(texto),
+});
+
 $('#btn-ferramentas').onclick = (e) => {
   e.stopPropagation();
   const menu = $('#menu-ferramentas');
   const naChamada = voz.conectado && voz.canalId === est.vozVista;
   menu.innerHTML = `
     <button data-ferramenta="roleta" ${naChamada ? '' : 'disabled'}>${icone('roleta')}<span><b>${esc(t('Roulette'))}</b><small>${esc(t(naChamada ? 'Pick people at random' : 'Join the voice channel first'))}</small></span></button>
-    <button disabled>${icone('radio')}<span><b>${esc(t('Radio'))}</b><small>${esc(t('Coming soon'))}</small></span></button>`;
+    <button data-ferramenta="radio" ${naChamada ? '' : 'disabled'}>${icone('radio')}<span><b>${esc(t('Radio'))}</b><small>${esc(t(!naChamada ? 'Join the voice channel first' : radio.tocandoAlgo() ? 'Playing now' : 'Listen to music together'))}</small></span></button>`;
   menu.hidden = !menu.hidden;
 };
 $('#menu-ferramentas').onclick = (e) => {
@@ -997,6 +1011,7 @@ $('#menu-ferramentas').onclick = (e) => {
   if (!b || b.disabled) return;
   $('#menu-ferramentas').hidden = true;
   if (b.dataset.ferramenta === 'roleta') roleta.abrir();
+  if (b.dataset.ferramenta === 'radio') radio.abrir();
 };
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.ferramentas')) $('#menu-ferramentas').hidden = true;
@@ -1547,6 +1562,12 @@ function montarDemo() {
   est.vozVista = 'c-ranked';
   est.vista = new URLSearchParams(location.search).get('demo') === 'chat' ? 'texto' : 'voz';
   render();
+  const yt = (id, titulo, autor, por) => ({ uid: id, tipo: 'youtube', id, titulo, autor, por, capa: `https://i.ytimg.com/vi/${id}/mqdefault.jpg` });
+  radio.demo([
+    yt('fJ9rUzIMcZQ', 'Queen – Bohemian Rhapsody (Official Video Remastered)', 'Queen Official', 'u-lu'),
+    yt('dQw4w9WgXcQ', 'Rick Astley - Never Gonna Give You Up (Official Video)', 'Rick Astley', 'u-beto'),
+    yt('btPJPFnesV4', 'Survivor - Eye Of The Tiger (Official HD Video)', 'Survivor', 'u-eu'),
+  ], 62);
 }
 
 // Uma "partida" desenhada, só pra ter o que mostrar na tela compartilhada

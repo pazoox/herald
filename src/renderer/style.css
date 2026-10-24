@@ -532,3 +532,95 @@ select option { background: var(--panel); }
 .roleta-vencedor .avatar { width: 34px; height: 34px; font-size: 13px; }
 .roleta-vencedor b { flex: 1; font-size: 15px; }
 .roleta-vencedor span { color: var(--lima); font-weight: 800; }
+/* ---------- Rádio (player flutuante) ---------- */
+.radio {
+  position: fixed; right: 24px; bottom: 24px; z-index: 80; width: 340px; display: flex; flex-direction: column;
+  background: var(--panel); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--line-strong), 0 24px 60px #000b;
+  overflow: hidden; animation: subir .2s ease;
+}
+.radio[hidden] { display: none; }
+.radio.arrastando { user-select: none; opacity: .92; }
+.radio-topo { display: flex; align-items: center; gap: 4px; padding: 8px 8px 6px 14px; cursor: grab; }
+.radio.arrastando .radio-topo { cursor: grabbing; }
+.radio-marca { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--accent); font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; }
+.radio-marca svg.i { width: 16px; height: 16px; }
+.radio-marca b { font-weight: 800; }
+.radio-tela { position: relative; margin: 0 10px; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; }
+.radio-tela iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.radio.soundcloud .radio-tela { aspect-ratio: 16 / 10; background: var(--bg); }
+.radio.vazio .radio-tela { display: none; }
+.radio-agora { display: flex; align-items: center; gap: 12px; padding: 12px 16px 4px; min-width: 0; }
+.radio-agora img { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: var(--panel-2); flex-shrink: 0; display: none; }
+.radio.recolhido .radio-agora img, .radio.vazio .radio-agora img { display: block; }
+.radio.vazio .radio-agora img { object-fit: contain; padding: 6px; image-rendering: pixelated; }
+.radio-agora-texto { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.radio-agora-texto b { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio-agora-texto small { color: var(--text-3); font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio.vazio .radio-agora-texto small { white-space: normal; }
+.radio-progresso { display: flex; align-items: center; gap: 10px; padding: 8px 16px 0; cursor: pointer; }
+.radio-trilho { flex: 1; height: 5px; border-radius: 99px; background: var(--panel-3); overflow: hidden; }
+.radio-trilho i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .9s linear; }
+.radio-progresso:hover .radio-trilho { height: 7px; }
+.radio-progresso span { font: 600 11px var(--mono); color: var(--text-3); min-width: 76px; text-align: right; }
+.radio.vazio .radio-progresso { display: none; }
+.radio-controles { display: flex; align-items: center; gap: 6px; padding: 10px 12px 6px 14px; }
+.radio-play {
+  width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+  background: var(--accent); color: var(--accent-ink); transition: filter .15s, transform .1s;
+}
+.radio-play svg.i { width: 18px; height: 18px; fill: currentColor; }
+.radio-play:hover { filter: brightness(1.06); }
+.radio-play:active { transform: scale(.95); }
+.radio-play:disabled { opacity: .35; cursor: default; filter: none; }
+#radio-pular svg.i { fill: currentColor; }
+#radio-pular:disabled { opacity: .35; cursor: default; background: none; }
+.radio-vol { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--text-3); padding: 0 6px; min-width: 0; }
+.radio-vol svg.i { width: 17px; height: 17px; flex-shrink: 0; }
+.radio-vol input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.radio-ver-fila { position: relative; }
+.radio-ver-fila.ligado { color: var(--accent); background: var(--accent-soft); }
+.radio-ver-fila small {
+  position: absolute; top: 2px; right: 1px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 99px;
+  background: var(--accent); color: var(--accent-ink); font: 800 10px/15px var(--sans);
+}
+.radio-ver-fila small:empty { display: none; }
+.radio-fila { margin: 4px 10px 0; padding: 8px; border-radius: 14px; background: var(--bg); max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.radio-fila[hidden] { display: none; }
+.radio-fila-topo { display: flex; justify-content: space-between; align-items: center; padding: 2px 6px 6px; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-3); }
+.radio-fila-topo .link { font-size: 12px; letter-spacing: 0; text-transform: none; }
+.radio-item { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 10px; }
+.radio-item:hover { background: var(--panel); }
+.radio-item-n { width: 14px; text-align: center; color: var(--text-3); font: 700 11px var(--mono); flex-shrink: 0; }
+.radio-item img, .radio-item-capa { width: 48px; height: 27px; border-radius: 6px; object-fit: cover; background: var(--panel-2); flex-shrink: 0; }
+.radio-item-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.radio-item-texto b { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio-item-texto small { font-size: 11px; color: var(--text-3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio-item .botao-icone { opacity: 0; }
+.radio-item:hover .botao-icone { opacity: 1; }
+.radio-fila-vazia { margin: 6px; color: var(--text-3); font-size: 12.5px; text-align: center; }
+.radio-adicionar { display: flex; gap: 8px; padding: 10px 12px 0; }
+.radio-adicionar input {
+  flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px;
+  font-size: 12.5px; outline: none; transition: border-color .15s;
+}
+.radio-adicionar input:focus { border-color: var(--accent); }
+.radio-adicionar input:disabled { opacity: .6; }
+.radio-adicionar .botao-primario { padding: 0; width: 40px; height: 40px; display: grid; place-items: center; flex-shrink: 0; }
+.radio-adicionar .botao-primario svg.i { width: 18px; height: 18px; }
+.radio-erro { margin: 0; padding: 6px 16px 12px; min-height: 12px; font-size: 12px; font-weight: 600; color: var(--danger); }
+.radio-erro:empty { padding-bottom: 6px; }
+
+/* recolhido: só a faixa, play/pular e volume; o player continua tocando escondido */
+.radio.recolhido { width: 320px; }
+.radio.recolhido .radio-tela { height: 0; aspect-ratio: auto; margin: 0; }
+.radio.recolhido .radio-fila, .radio.recolhido .radio-adicionar, .radio.recolhido .radio-erro, .radio.recolhido .radio-ver-fila { display: none; }
+.radio.recolhido .radio-agora { padding-top: 2px; }
+.radio.recolhido .radio-controles { padding-bottom: 12px; }
+
+/* ícones dentro de <span data-icone> ficavam na linha do texto (2-3px acima do centro) */
+.radio [data-icone] { display: grid; place-items: center; }
+/* o triângulo do play parece torto se ficar no centro exato: empurra 1px pra direita */
+.radio-play svg.i { transform: translateX(1px); }
+.radio-play.pausado svg.i { transform: none; }
+.radio-fila { overflow-x: hidden; }
+.radio-item { min-width: 0; }

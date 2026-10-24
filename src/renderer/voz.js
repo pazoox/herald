@@ -303,6 +303,8 @@ export async function entrar({ canalId, chave, userId, turn = [] }) {
   acoes.assistir = sala.makeAction('assistir');
   acoes.roleta = sala.makeAction('roleta');
   acoes.roleta.onMessage = (dados, { peerId }) => avisar('roleta', { ...dados, de: voz.participantes.get(peerId)?.userId });
+  acoes.radio = sala.makeAction('radio');
+  acoes.radio.onMessage = (dados, { peerId }) => avisar('radio', { estado: dados, de: voz.participantes.get(peerId)?.userId });
 
   sala.onPeerJoin = (id) => {
     voz.participantes.set(id, {
@@ -311,6 +313,7 @@ export async function entrar({ canalId, chave, userId, turn = [] }) {
     });
     sala.addTrack(micTrack, voz.micStream, { target: id, metadata: { tipo: 'mic' } });
     acoes.estado.send(estadoAtual(), { target: id });
+    avisar('chegou', id); // o Rádio manda a fila atual pra quem chegou
     tocarSom('entrou');
     avisar('participantes');
   };
@@ -546,6 +549,11 @@ export function pararTela() {
 // Roleta: manda o giro pra todo mundo da chamada (cada um anima igual a partir da semente)
 export function enviarRoleta(giro) {
   acoes.roleta?.send(giro);
+}
+
+// Rádio: manda o estado (fila, pausado, posição) pra todos ou só pra quem acabou de chegar
+export function enviarRadio(estado, peerId) {
+  acoes.radio?.send(estado, peerId ? { target: peerId } : undefined);
 }
 
 // Pede pro transmissor mandar uma versão mais leve só pra mim

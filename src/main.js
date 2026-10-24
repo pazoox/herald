@@ -80,6 +80,49 @@ function acharConvite(argv) {
   return m ? m[1].toLowerCase() : null;
 }
 
+// ================= Rádio =================
+// YouTube e SoundCloud tocam pelo player oficial de cada um; texto solto vira busca no YouTube.
+// (Spotify fica de fora: o player dele só toca 30s sem login Premium de cada um.)
+
+const pegarTexto = async (url) => (await net.fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'Mozilla/5.0' } })).text();
+const pegarJson = async (url) => {
+  const r = await net.fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+};
+
+function idDoYoutube(texto) {
+  const m = texto.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/|music\.youtube\.com\/watch\?(?:.*&)?v=)([\w-]{11})/i);
+  return m?.[1] || null;
+}
+
+async function faixaDoYoutube(id) {
+  const info = await pegarJson(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent('https://www.youtube.com/watch?v=' + id)}`);
+  return { tipo: 'youtube', id, titulo: info.title, autor: info.author_name, capa: `https://i.ytimg.com/vi/${id}/mqdefault.jpg` };
+}
+
+async function buscarNoYoutube(busca) {
+  const html = await pegarTexto('https://www.youtube.com/results?search_query=' + encodeURIComponent(busca));
+  const id = html.match(/"videoRenderer":\{"videoId":"([\w-]{11})"/)?.[1];
+  if (!id) return { erro: 'not-found' };
+  return faixaDoYoutube(id);
+}
+
+async function buscarFaixa(texto) {
+  if (!texto) return { erro: 'not-found' };
+  const yt = idDoYoutube(texto);
+  if (yt) return faixaDoYoutube(yt);
+
+  if (/^https?:\/\/(on\.|m\.)?soundcloud\.com\//i.test(texto)) {
+    const info = await pegarJson(`https://soundcloud.com/oembed?format=json&url=${encodeURIComponent(texto)}`);
+    const url = decodeURIComponent(info.html.match(/url=([^&"]+)/)?.[1] || '') || texto;
+    return { tipo: 'soundcloud', id: url, titulo: info.title, autor: info.author_name, capa: info.thumbnail_url };
+  }
+
+  if (/^https?:\/\//i.test(texto)) return { erro: 'unsupported' };
+  return buscarNoYoutube(texto); // nome da música
+}
+
 // Tamanho/posição da janela: lembra o último; na primeira vez ocupa ~85% da tela
 const ARQUIVO_JANELA = () => path.join(app.getPath('userData'), 'janela.json');
 
@@ -178,8 +221,17 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(caminho).toString());
   });
 
-  s.setPermissionRequestHandler((_wc, permissao, cb) => cb(PERMITIDAS.has(permissao)));
-  s.setPermissionCheckHandler((_wc, permissao) => PERMITIDAS.has(permissao));
+  // Rádio: o player do YouTube só toca se souber de qual site ele está embutido.
+  // Como o app não tem site (é app://), dizemos que é a página do Herald.
+  s.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube.com/embed/*', 'https://www.youtube-nocookie.com/embed/*'] }, (det, cb) => {
+    det.requestHeaders.Referer = 'https://herald-chat.vercel.app/';
+    cb({ requestHeaders: det.requestHeaders });
+  });
+
+  // Só páginas do próprio Herald ganham microfone/tela; o player do Rádio (YouTube/SoundCloud) nunca
+  const doHerald = (url) => String(url || '').startsWith('app://herald');
+  s.setPermissionRequestHandler((_wc, permissao, cb, det) => cb(PERMITIDAS.has(permissao) && doHerald(det?.requestingUrl)));
+  s.setPermissionCheckHandler((_wc, permissao, origem) => PERMITIDAS.has(permissao) && doHerald(origem));
 
   // Quando a página pede getDisplayMedia, entrega a tela/janela escolhida no nosso seletor
   s.setDisplayMediaRequestHandler((_req, callback) => {
@@ -225,6 +277,16 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('versao', () => app.getVersion());
+
+  // Rádio: transforma o que a pessoa colou (link ou nome da música) numa faixa tocável
+  ipcMain.handle('radio-buscar', async (_e, texto) => {
+    try {
+      return await buscarFaixa(String(texto || '').trim().slice(0, 300));
+    } catch (err) {
+      console.error('radio:', err?.message);
+      return { erro: 'not-found' };
+    }
+  });
 
   // A página pergunta se o app foi aberto por um convite
   ipcMain.handle('convite-pendente', () => {

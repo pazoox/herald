@@ -27,6 +27,12 @@ const CAMINHOS = {
   ferramentas: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>',
   roleta: '<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.4 6.4M12 12 5.6 18.4M12 12H3"/>',
   radio: '<path d="M4.9 16.1a10 10 0 0 1 0-8.2M19.1 7.9a10 10 0 0 1 0 8.2M7.8 13.6a5 5 0 0 1 0-3.2M16.2 10.4a5 5 0 0 1 0 3.2"/><circle cx="12" cy="12" r="2"/>',
+  tocar: '<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/>',
+  pausar: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  pular: '<path d="M5 4.5v15a1 1 0 0 0 1.5.9l10-7.5a1 1 0 0 0 0-1.8l-10-7.5A1 1 0 0 0 5 4.5zM19 4v16"/>',
+  fila: '<path d="M3 6h13M3 12h13M3 18h9M17 15v6l4-3z"/>',
+  recolher: '<path d="m18 15-6-6-6 6"/>',
+  expandir: '<path d="m6 9 6 6 6-6"/>',
   porta:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 
