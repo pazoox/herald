@@ -39,6 +39,7 @@ function avisar(tipo, dados) {
 }
 
 let sala = null;
+const preferenciasTela = new Map(); // peerId -> { baixa } (quem assiste minha tela)
 let acoes = {};
 let perfil = null; // { userId }
 let micTrack = null;
@@ -108,9 +109,12 @@ async function aplicarParametros(pc) {
       enc.priority = 'high';
       enc.networkPriority = 'high';
     } else if (track.kind === 'video' && telaQualidade) {
-      enc.maxBitrate = telaQualidade.bitrate;
-      enc.maxFramerate = telaQualidade.fps;
-      enc.scaleResolutionDownBy = 1;
+      // quem pediu "qualidade menor" (internet fraca) recebe 720p30 mais leve
+      const peerId = Object.entries(sala?.getPeers() || {}).find(([, c]) => c === pc)?.[0];
+      const baixa = preferenciasTela.get(peerId)?.baixa;
+      enc.maxBitrate = baixa ? 2_500_000 : telaQualidade.bitrate;
+      enc.maxFramerate = baixa ? 30 : telaQualidade.fps;
+      enc.scaleResolutionDownBy = baixa ? Math.max(1, telaQualidade.h / 720) : 1;
     } else {
       continue;
     }
@@ -216,7 +220,9 @@ function ligarCadeia() {
   const { graves, ruido, nivelador, manual, timbre } = cadeia;
   for (const no of [graves, ruido, nivelador, manual]) no.disconnect();
   ruido.port.postMessage({ type: 'setEnabled', value: audio.ruido });
-  ruido.port.postMessage({ type: 'setAttenuationLimit', value: audio.forca === 'forte' ? 100 : 24 });
+  // Limite de quanto a IA pode abaixar o ruído. 100 dB (o máximo) zerava os
+  // pedacinhos fracos entre sílabas e "esburacava" a voz.
+  ruido.port.postMessage({ type: 'setAttenuationLimit', value: audio.forca === 'forte' ? 35 : 18 });
   manual.gain.value = 10 ** (audio.ganho / 20);
   const volume = audio.auto ? nivelador : manual;
   graves.connect(ruido).connect(volume).connect(timbre);
@@ -261,7 +267,17 @@ export function microfoneAtual() {
 
 // ================= Entrar / sair =================
 
-export async function entrar({ canalId, chave, userId }) {
+// turn: servidores de apoio (Cloudflare) vindos do Supabase. Com "esconder IP" ligado e
+// TURN disponível, tudo passa pelo apoio (iceTransportPolicy 'relay') e ninguém vê seu IP.
+export function esconderIp() {
+  return ler('herald-esconder-ip') !== '0';
+}
+export function definirEsconderIp(ligado) {
+  guardar('herald-esconder-ip', ligado ? '1' : '0');
+}
+export const rede = { viaApoio: false };
+
+export async function entrar({ canalId, chave, userId, turn = [] }) {
   if (voz.canalId === canalId) return;
   if (sala) await sair();
   perfil = { userId };
@@ -270,7 +286,9 @@ export async function entrar({ canalId, chave, userId }) {
 
   voz.canalId = canalId;
   voz.conectado = true;
-  sala = joinRoom({ appId: APP_ID, password: chave, rtcConfig: { iceServers: ICE }, rtcPolyfill: Conexao }, canalId);
+  rede.viaApoio = esconderIp() && turn.length > 0;
+  const rtcConfig = { iceServers: [...ICE, ...turn], iceTransportPolicy: rede.viaApoio ? 'relay' : 'all' };
+  sala = joinRoom({ appId: APP_ID, password: chave, rtcConfig, rtcPolyfill: Conexao }, canalId);
 
   acoes.estado = sala.makeAction('estado');
   acoes.assistir = sala.makeAction('assistir');
@@ -292,6 +310,7 @@ export async function entrar({ canalId, chave, userId }) {
     if (p.audioEl) p.audioEl.srcObject = null;
     analisadores.delete(id);
     voz.espectadores.delete(id);
+    preferenciasTela.delete(id);
     voz.participantes.delete(id);
     tocarSom('saiu');
     avisar('participantes');
@@ -312,7 +331,7 @@ export async function entrar({ canalId, chave, userId }) {
     }
     p.audioEl.srcObject = stream;
     p.audioEl.volume = p.volume;
-    p.audioEl.muted = voz.surdo;
+    aplicarMudoDe(p);
     if (saidaId && p.audioEl.setSinkId) p.audioEl.setSinkId(saidaId).catch(() => {});
     p.audioEl.play().catch(() => {});
     monitorarFala(id, stream);
@@ -329,6 +348,7 @@ export async function entrar({ canalId, chave, userId }) {
     if (novoUser) {
       p.volume = Number(ler('herald-vol-' + p.userId) ?? 1);
       if (p.audioEl) p.audioEl.volume = p.volume;
+      aplicarMudoDe(p);
     }
     if (!p.aoVivo) {
       p.assistindo = false;
@@ -338,8 +358,17 @@ export async function entrar({ canalId, chave, userId }) {
   };
 
   acoes.assistir.onMessage = (dados, { peerId }) => {
-    if (dados.quer) enviarTelaPara(peerId);
-    else pararTelaPara(peerId);
+    if (!dados.quer) {
+      preferenciasTela.delete(peerId);
+      return pararTelaPara(peerId);
+    }
+    preferenciasTela.set(peerId, { baixa: Boolean(dados.baixa) });
+    if (voz.espectadores.has(peerId)) {
+      const pc = sala.getPeers()[peerId];
+      if (pc) aplicarParametros(pc);
+    } else {
+      enviarTelaPara(peerId);
+    }
   };
 
   tocarSom('entrou');
@@ -355,6 +384,7 @@ export async function sair() {
   acoes = {};
   voz.participantes.clear();
   voz.espectadores.clear();
+  preferenciasTela.clear();
   voz.canalId = null;
   voz.conectado = false;
   for (const id of [...analisadores.keys()]) if (id !== 'eu') analisadores.delete(id);
@@ -375,7 +405,7 @@ function anunciarEstado() {
 
 function aplicarSilencio() {
   if (micTrack) micTrack.enabled = !voz.mudo;
-  for (const p of voz.participantes.values()) if (p.audioEl) p.audioEl.muted = voz.surdo;
+  for (const p of voz.participantes.values()) aplicarMudoDe(p);
   anunciarEstado();
 }
 
@@ -400,6 +430,19 @@ export function definirVolume(userId, volume) {
     p.volume = volume;
     if (p.audioEl) p.audioEl.volume = volume;
   }
+}
+
+// Mutar alguém só pra mim (os outros continuam ouvindo)
+export function mudoLocal(userId) {
+  return ler('herald-mudo-' + userId) === '1';
+}
+export function definirMudoLocal(userId, mudo) {
+  guardar('herald-mudo-' + userId, mudo ? '1' : '0');
+  for (const p of voz.participantes.values()) if (p.userId === userId) aplicarMudoDe(p);
+  avisar('participantes');
+}
+function aplicarMudoDe(p) {
+  if (p.audioEl) p.audioEl.muted = voz.surdo || (p.userId && mudoLocal(p.userId));
 }
 
 export function volumeDe(userId) {
@@ -476,6 +519,15 @@ export function pararTela() {
   avisar('participantes');
 }
 
+// Pede pro transmissor mandar uma versão mais leve só pra mim
+export function pedirQualidadeBaixa(peerId, baixa) {
+  const p = voz.participantes.get(peerId);
+  if (!p || !acoes.assistir) return;
+  p.qualidadeBaixa = baixa;
+  acoes.assistir.send({ quer: true, baixa }, { target: peerId });
+  avisar('participantes');
+}
+
 export function assistir(peerId, quer) {
   const p = voz.participantes.get(peerId);
   if (!p || !acoes.assistir) return;
@@ -524,21 +576,51 @@ setInterval(() => {
 
 // ================= Teste de microfone =================
 
+// Grava alguns segundos e DEPOIS toca de volta (como o Discord).
+// Ouvir ao vivo enganava o cancelamento de eco: ele achava que a sua voz era
+// eco dela mesma e cortava pedaços. Gravando em Opus 128 kbps, você ouve
+// exatamente o que a galera ouve.
 let testeAudio = null;
-export function testarMicrofone(ligar) {
-  if (!ligar) {
-    if (testeAudio) {
-      testeAudio.pause();
-      testeAudio.srcObject = null;
-      testeAudio = null;
-    }
-    return;
-  }
+let testeGravador = null;
+
+export async function testarMicrofone(segundos, aoMudar) {
+  pararTeste();
   if (!voz.micStream) return;
-  testeAudio = new Audio();
-  testeAudio.srcObject = voz.micStream;
-  if (saidaId) testeAudio.setSinkId?.(saidaId).catch(() => {});
-  testeAudio.play();
+  const pedacos = [];
+  testeGravador = new MediaRecorder(voz.micStream, { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: BITRATE_VOZ });
+  testeGravador.ondataavailable = (e) => e.data.size && pedacos.push(e.data);
+  const gravado = new Promise((r) => (testeGravador.onstop = r));
+  testeGravador.start();
+  for (let falta = segundos; falta > 0; falta--) {
+    aoMudar('gravando', falta);
+    await new Promise((r) => setTimeout(r, 1000));
+    if (!testeGravador) return; // cancelado
+  }
+  testeGravador.stop();
+  await gravado;
+  testeGravador = null;
+  testeAudio = new Audio(URL.createObjectURL(new Blob(pedacos, { type: 'audio/webm' })));
+  if (saidaId) await testeAudio.setSinkId?.(saidaId).catch(() => {});
+  aoMudar('tocando');
+  await new Promise((r) => {
+    testeAudio.onended = r;
+    testeAudio.onpause = r;
+    testeAudio.play().catch(r);
+  });
+  testeAudio = null;
+  aoMudar('fim');
+}
+
+export function pararTeste() {
+  if (testeGravador) {
+    const g = testeGravador;
+    testeGravador = null;
+    if (g.state !== 'inactive') g.stop();
+  }
+  if (testeAudio) {
+    testeAudio.pause();
+    testeAudio = null;
+  }
 }
 
 // ================= Sons =================

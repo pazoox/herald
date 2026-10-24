@@ -35,6 +35,24 @@ let fontes = new Map(); // id -> DesktopCapturerSource (da última listagem)
 let escolha = null; // { id, audio } — o que a pessoa escolheu no seletor
 let conviteGuardado = acharConvite(process.argv); // convite que abriu o app
 
+// Atualização automática pelo GitHub Releases (lê o latest.yml da release mais nova).
+// Baixa em segundo plano; a página mostra "Atualização pronta — reiniciar".
+function iniciarAtualizador() {
+  if (!app.isPackaged) return;
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true; // se a pessoa só fechar o app, instala na saída
+  const avisar = (estado, dados = {}) => janela?.webContents.send('atualizacao', { estado, ...dados });
+  autoUpdater.on('update-available', (i) => avisar('baixando', { versao: i.version }));
+  autoUpdater.on('download-progress', (p) => avisar('baixando', { progresso: Math.round(p.percent) }));
+  autoUpdater.on('update-downloaded', (i) => avisar('pronta', { versao: i.version }));
+  autoUpdater.on('error', (e) => console.error('atualizador:', e?.message));
+  ipcMain.handle('instalar-atualizacao', () => autoUpdater.quitAndInstall(false, true));
+  const procurar = () => autoUpdater.checkForUpdates().catch(() => {});
+  setTimeout(procurar, 5000);
+  setInterval(procurar, 2 * 60 * 60 * 1000); // de 2 em 2 horas
+}
+
 const ARQUIVO_SESSAO = () => path.join(app.getPath('userData'), 'sessao.bin');
 
 function lerSessao() {
@@ -122,8 +140,25 @@ function criarJanela() {
   for (const evento of ['resize', 'move', 'maximize', 'unmaximize']) janela.on(evento, guardarDepois);
   janela.on('close', guardarTamanho);
 
-  // Links externos abrem no navegador, nunca dentro do app
+  // Links externos abrem no navegador, nunca dentro do app.
+  // Exceção: a janela separada da transmissão (página nossa, mesma origem).
   janela.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('app://herald/janela-tela.html')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 1280,
+          height: 760,
+          minWidth: 480,
+          minHeight: 280,
+          backgroundColor: '#000000',
+          icon: path.join(__dirname, '..', 'build', 'icon.png'),
+          titleBarStyle: 'hidden',
+          titleBarOverlay: { color: '#00000000', symbolColor: '#aaa5b8', height: 40 },
+          autoHideMenuBar: true,
+        },
+      };
+    }
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -196,6 +231,7 @@ app.whenReady().then(() => {
   });
 
   criarJanela();
+  iniciarAtualizador();
 
   // Atalhos que funcionam mesmo com o jogo em primeiro plano
   const atalhos = { 'CommandOrControl+Shift+M': 'mudo', 'CommandOrControl+Shift+D': 'surdo' };

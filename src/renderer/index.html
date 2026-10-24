@@ -48,6 +48,7 @@
       <div id="lista-nests" class="lista-nests"></div>
       <button id="btn-novo-nest" class="nest-botao novo" data-i18n-tip="Create a Nest" data-icone="mais"></button>
       <div class="vao"></div>
+      <button id="btn-atualizar" class="nest-botao atualizar" data-icone="baixar" hidden></button>
     </nav>
 
     <main class="casca">
@@ -247,7 +248,7 @@
         <div class="medidor"><div id="medidor-barra"></div><div class="medidor-alvo"></div></div>
         <span class="medidor-info" id="medidor-info"></span>
       </div>
-      <button id="btn-testar-mic" class="botao-secundario" data-i18n>Test microphone (hear yourself)</button>
+      <button id="btn-testar-mic" class="botao-secundario" data-i18n>Test microphone (record 5 seconds)</button>
       <div class="campo">
         <span data-i18n>Output</span>
         <div class="seletor" id="sel-saida"></div>
@@ -278,6 +279,14 @@
         <span class="trilha"></span>
         <span><span data-i18n>Echo cancellation</span> <small data-i18n>turn off if you use headphones — sounds more natural</small></span>
       </label>
+
+      <div class="secao-titulo" data-i18n>Privacy</div>
+      <label class="alternador">
+        <input type="checkbox" id="chk-esconder-ip">
+        <span class="trilha"></span>
+        <span><span data-i18n>Hide my IP</span> <small data-i18n>your voice and screen go through a secure relay, so nobody in the call sees your IP. Adds a tiny delay.</small></span>
+      </label>
+      <p class="aviso-rede" id="aviso-rede"></p>
 
       <div class="secao-titulo" data-i18n>Shortcuts</div>
       <div class="atalhos">

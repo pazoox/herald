@@ -159,6 +159,13 @@ async function iniciar() {
     if (est.eu) entrarComConvite(codigo);
     else conviteDepois = codigo;
   });
+  window.herald?.aoAtualizar?.((d) => {
+    if (d.estado !== 'pronta') return;
+    const b = $('#btn-atualizar');
+    b.hidden = false;
+    b.dataset.tip = t('Update ready ({v}) — click to restart', { v: d.versao });
+    b.onclick = () => window.herald.instalarAtualizacao();
+  });
   window.herald?.aoAtalho?.((acao) => {
     if (!voz.conectado) return;
     if (acao === 'mudo') chamada.alternarMudo();
@@ -520,8 +527,8 @@ function renderCanais() {
         if (pessoas.length) {
           html += '<div class="voz-pessoas">';
           for (const [userId, p] of pessoas) {
-            const marcas = [p.aoVivo ? `<span class="tag-vivo">${esc(t('LIVE'))}</span>` : '', p.surdo ? icone('fone-off') : p.mudo ? icone('mic-off') : ''].join('');
-            html += `<div class="voz-pessoa">${avatarHtml(userId, 'mini')}<span>${esc(nomeDe(userId))}</span><span class="vp-marcas">${marcas}</span></div>`;
+            const marcas = [p.aoVivo ? `<span class="tag-vivo">${esc(t('LIVE'))}</span>` : '', userId !== est.eu.id && chamada.mudoLocal(userId) ? `<span class="mudo-local">${icone('som-off')}</span>` : '', p.surdo ? icone('fone-off') : p.mudo ? icone('mic-off') : ''].join('');
+            html += `<div class="voz-pessoa" data-usuario="${userId}">${avatarHtml(userId, 'mini')}<span>${esc(nomeDe(userId))}</span><span class="vp-marcas">${marcas}</span></div>`;
           }
           html += '</div>';
         }
@@ -585,7 +592,7 @@ function renderMembros() {
   const item = (id, on) => {
     const p = presenca.get(id);
     const sub = p?.voz ? `${icone('volume')} ${esc((est.canais.get(est.nestAtual) || []).find((c) => c.id === p.voz)?.name || '')}` : '';
-    return `<div class="membro ${on ? '' : 'off'}">${avatarHtml(id)}<div class="membro-info"><span class="membro-nome">${esc(nomeDe(id))}${id === dono ? ` <span class="tag-dono">${esc(t('Owner'))}</span>` : ''}</span>${sub ? `<span class="membro-sub">${sub}</span>` : ''}</div></div>`;
+    return `<div class="membro ${on ? '' : 'off'}" data-usuario="${id}">${avatarHtml(id)}<div class="membro-info"><span class="membro-nome">${esc(nomeDe(id))}${id === dono ? ` <span class="tag-dono">${esc(t('Owner'))}</span>` : ''}</span>${sub ? `<span class="membro-sub">${sub}</span>` : ''}</div></div>`;
   };
   $('#contagem-membros').textContent = lista.length ? `· ${lista.length}` : '';
   $('#membros').innerHTML =
@@ -727,9 +734,25 @@ $('#form-canal').addEventListener('submit', async (e) => {
 
 // ================= Voz =================
 
+// Credenciais do servidor de apoio (TURN), geradas pela função do Supabase.
+// Valem 24 h; renova antes de vencer. Sem TURN, a chamada funciona direto.
+let turnCache = { servidores: [], validoAte: 0 };
+async function obterTurn() {
+  if (turnCache.validoAte - Date.now() > 3600 * 1000) return turnCache.servidores;
+  try {
+    const { data, error } = await sb.functions.invoke('turn-credentials');
+    if (error || !data?.iceServers?.length) return [];
+    turnCache = { servidores: data.iceServers, validoAte: data.validoAte || Date.now() + 12 * 3600 * 1000 };
+  } catch {
+    return [];
+  }
+  return turnCache.servidores;
+}
+
 async function entrarNaVoz(canal) {
   try {
-    await chamada.entrar({ canalId: canal.id, chave: canal.voice_key, userId: est.eu.id });
+    const turn = await obterTurn();
+    await chamada.entrar({ canalId: canal.id, chave: canal.voice_key, userId: est.eu.id, turn });
   } catch (err) {
     console.error(err);
     aviso(t('Could not access the microphone.'));
@@ -801,9 +824,9 @@ function renderPalco() {
   const videos = [];
   const pessoas = [];
   if (dentro) {
-    if (voz.telaStream) videos.push({ chave: 'video-eu', nome: t('Your screen'), stream: voz.telaStream, local: true });
+    if (voz.telaStream) videos.push({ chave: 'video-eu', nome: t('Your screen'), stream: voz.telaStream, local: true, userId: est.eu.id });
     for (const p of voz.participantes.values()) {
-      if (p.assistindo && p.aoVivo) videos.push({ chave: `video-${p.peerId}`, nome: nomeDe(p.userId), stream: p.telaStream, peerId: p.peerId });
+      if (p.assistindo && p.aoVivo) videos.push({ chave: `video-${p.peerId}`, nome: nomeDe(p.userId), stream: p.telaStream, peerId: p.peerId, userId: p.userId });
     }
     pessoas.push({ chave: 'pessoa-eu', userId: est.eu.id, mudo: voz.mudo, surdo: voz.surdo, aoVivo: voz.aoVivo, ehEu: true });
     for (const p of voz.participantes.values()) {
@@ -820,6 +843,7 @@ function renderPalco() {
   $('#palco').classList.toggle('com-video', videos.length > 0);
   $('#palco-pessoas').dataset.vazio = pessoas.length ? '' : t('Nobody here yet. Jump in!');
   sincronizar($('#palco-videos'), videos, atualizarVideo);
+  limparJanelas(new Set(videos.map((v) => v.chave)));
   sincronizar($('#palco-pessoas'), pessoas, atualizarCartao);
   aplicarFala();
 }
@@ -848,15 +872,13 @@ function textoPing(d) {
 function atualizarCartao(el, d) {
   el.className = 'cartao-pessoa';
   el.dataset.fala = d.userId;
-  const marcas = d.surdo ? icone('fone-off') : d.mudo ? icone('mic-off') : '';
-  const volume = !d.ehEu && !d.fora ? `<input type="range" class="cartao-volume" min="0" max="1" step="0.01" value="${chamada.volumeDe(d.userId)}" data-vol="${d.userId}" title="${esc(nomeDe(d.userId))}">` : '';
+  const marcas = (!d.ehEu && chamada.mudoLocal(d.userId) ? icone('som-off') : '') || (d.surdo ? icone('fone-off') : d.mudo ? icone('mic-off') : '');
   const html = `${d.aoVivo ? `<span class="etiqueta-vivo">${esc(t('LIVE'))}</span>` : ''}
     ${avatarHtml(d.userId)}
     <div class="nome">${esc(nomeDe(d.userId))}${d.ehEu ? ` <span class="voce">(${esc(t('you'))})</span>` : ''}</div>
     ${textoPing(d)}
     ${marcas ? `<div class="marcas"><span class="marca">${marcas}</span></div>` : ''}
-    ${d.aoVivo && d.peerId && !d.assistindo ? `<div class="assistir"><button class="botao-assistir" data-assistir="${d.peerId}">${icone('olho')}${esc(t('Watch'))}</button></div>` : ''}
-    ${volume}`;
+    ${d.aoVivo && d.peerId && !d.assistindo ? `<div class="assistir"><button class="botao-assistir" data-assistir="${d.peerId}">${icone('olho')}${esc(t('Watch'))}</button></div>` : ''}`;
   if (el.dataset.html !== html) {
     el.dataset.html = html;
     el.innerHTML = html;
@@ -873,15 +895,22 @@ function atualizarVideo(el, d) {
         <div class="linha baixo">
           <span class="quem">${esc(d.nome)}</span>
           <div class="acoes">
+            <button data-janela>${icone('janela')}${esc(t('Pop out'))}</button>
             <button data-cheia>${icone('maximizar')}${esc(t('Fullscreen'))}</button>
             ${d.local ? `<button data-parar-tela>${icone('x')}${esc(t('Stop'))}</button>` : `<button data-sair-video="${d.peerId}">${icone('x')}${esc(t('Close'))}</button>`}
           </div>
         </div>
-      </div>`;
+      </div>
+      <div class="em-janela"><span>${esc(t('Watching in another window'))}</span><button data-trazer>${esc(t('Bring it back'))}</button></div>`;
+    if (!d.local) el.querySelector('video').volume = volumeTela(d.userId);
   }
+  el.dataset.peer = d.peerId || 'eu';
+  el.dataset.usuarioTela = d.userId;
+  el.classList.toggle('stats-fixas', ler('herald-stats-fixas') === '1');
   const video = el.querySelector('video');
   if (video.srcObject !== (d.stream || null)) video.srcObject = d.stream || null;
   if (!d.local) video.muted = voz.surdo;
+  el.classList.toggle('popout', Boolean(janelasTela.get(d.chave) && !janelasTela.get(d.chave).closed));
   el.classList.toggle('carregando', !d.stream);
   el.querySelector('.carregando-texto').hidden = Boolean(d.stream);
 }
@@ -893,6 +922,8 @@ $('#palco').addEventListener('click', (e) => {
   else if (b.dataset.sairVideo) chamada.assistir(b.dataset.sairVideo, false);
   else if ('pararTela' in b.dataset) chamada.pararTela();
   else if ('cheia' in b.dataset) b.closest('.cartao-video').requestFullscreen();
+  else if ('janela' in b.dataset) abrirEmJanela(b.closest('.cartao-video'));
+  else if ('trazer' in b.dataset) fecharJanela(b.closest('.cartao-video').dataset.chave);
 });
 $('#palco').addEventListener('dblclick', (e) => {
   const v = e.target.closest('.cartao-video');
@@ -920,6 +951,223 @@ function atualizarStats({ video, enviando }) {
   // atualiza o ping dos cartões sem redesenhar tudo
   if (est.vista === 'voz') renderPalco();
 }
+
+// ================= Transmissão em outra janela =================
+// A janela nova é uma página nossa (janela-tela.html); entregamos o vídeo direto pra ela.
+// O som continua saindo daqui, então o cartão fica tocando por baixo do aviso.
+
+const janelasTela = new Map(); // chave do cartão -> Window
+
+function volumeTela(userId) {
+  return Number(ler('herald-vol-tela-' + userId) ?? 1);
+}
+
+function abrirEmJanela(cartao) {
+  const chave = cartao.dataset.chave;
+  const aberta = janelasTela.get(chave);
+  if (aberta && !aberta.closed) return aberta.focus();
+  const video = cartao.querySelector('video');
+  const nome = cartao.querySelector('.quem')?.textContent || 'Herald';
+  const w = window.open('janela-tela.html', `tela-${chave}`);
+  if (!w) return;
+  janelasTela.set(chave, w);
+  const preparar = () => {
+    const v = w.document?.getElementById('video');
+    if (!v) return setTimeout(preparar, 50);
+    v.srcObject = video.srcObject;
+    v.muted = true;
+    w.document.getElementById('nome').textContent = nome;
+    w.document.title = `${nome} — Herald`;
+    // esconde o nome quando o mouse para
+    let parado;
+    w.document.addEventListener('mousemove', () => {
+      w.document.body.classList.remove('parado');
+      clearTimeout(parado);
+      parado = setTimeout(() => w.document.body.classList.add('parado'), 2500);
+    });
+    w.document.addEventListener('dblclick', () => (w.document.fullscreenElement ? w.document.exitFullscreen() : w.document.documentElement.requestFullscreen()));
+  };
+  preparar();
+  cartao.classList.add('popout');
+  // percebe quando a pessoa fecha a janela
+  const vigia = setInterval(() => {
+    if (!w.closed) return;
+    clearInterval(vigia);
+    janelasTela.delete(chave);
+    $(`[data-chave="${chave}"]`)?.classList.remove('popout');
+  }, 700);
+}
+
+function fecharJanela(chave) {
+  janelasTela.get(chave)?.close();
+  janelasTela.delete(chave);
+  $(`[data-chave="${chave}"]`)?.classList.remove('popout');
+}
+
+// Fecha janelas de transmissões que acabaram
+function limparJanelas(chavesAtivas) {
+  for (const chave of [...janelasTela.keys()]) if (!chavesAtivas.has(chave)) fecharJanela(chave);
+}
+
+// ================= Menu de botão direito na transmissão =================
+
+function abrirMenuTela(cartao, x, y) {
+  fecharMenuPessoa();
+  const local = cartao.dataset.peer === 'eu';
+  const peerId = cartao.dataset.peer;
+  const userId = cartao.dataset.usuarioTela;
+  const participante = voz.participantes.get(peerId);
+  const video = cartao.querySelector('video');
+  const emJanela = cartao.classList.contains('popout');
+  const statsFixas = ler('herald-stats-fixas') === '1';
+  const vol = Math.round(video.volume * 100);
+
+  let html = `<div class="mp-topo">${avatarHtml(userId)}<div><b>${esc(local ? t('Your screen') : t("{name}'s stream", { name: nomeDe(userId) }))}</b></div></div>`;
+  if (!local) {
+    html += `<div class="mp-bloco">
+      <div class="mp-rotulo"><span>${esc(t('Stream volume'))}</span><b id="mt-vol-valor">${vol}%</b></div>
+      <input type="range" id="mt-vol" min="0" max="100" step="1" value="${vol}">
+    </div>`;
+  }
+  html += `<button data-mt="janela">${icone('janela')}${esc(t(emJanela ? 'Bring it back' : 'Pop out'))}</button>
+    <button data-mt="cheia">${icone('maximizar')}${esc(t('Fullscreen'))}</button>
+    <label class="alternador mp-alternador"><input type="checkbox" id="mt-stats" ${statsFixas ? 'checked' : ''}><span class="trilha"></span><span>${esc(t('Always show stats'))} <small>${esc(t('resolution, fps and speed'))}</small></span></label>`;
+  if (!local) {
+    html += `<label class="alternador mp-alternador"><input type="checkbox" id="mt-baixa" ${participante?.qualidadeBaixa ? 'checked' : ''}><span class="trilha"></span><span>${esc(t('Lower quality'))} <small>${esc(t('720p 30fps — for weak internet'))}</small></span></label>
+      <button data-mt="parar" class="perigo">${icone('x')}${esc(t('Stop watching'))}</button>`;
+  } else {
+    html += `<button data-mt="parar" class="perigo">${icone('x')}${esc(t('Stop sharing'))}</button>`;
+  }
+
+  menuPessoa = document.createElement('div');
+  menuPessoa.className = 'menu-pessoa';
+  menuPessoa.innerHTML = html;
+  document.body.appendChild(menuPessoa);
+  const r = menuPessoa.getBoundingClientRect();
+  menuPessoa.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`;
+  menuPessoa.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`;
+
+  menuPessoa.addEventListener('input', (e) => {
+    if (e.target.id !== 'mt-vol') return;
+    video.volume = Number(e.target.value) / 100;
+    guardar('herald-vol-tela-' + userId, video.volume);
+    $('#mt-vol-valor').textContent = `${e.target.value}%`;
+  });
+  menuPessoa.addEventListener('change', (e) => {
+    if (e.target.id === 'mt-stats') {
+      guardar('herald-stats-fixas', e.target.checked ? '1' : '0');
+      $$('.cartao-video').forEach((c) => c.classList.toggle('stats-fixas', e.target.checked));
+    }
+    if (e.target.id === 'mt-baixa') chamada.pedirQualidadeBaixa(peerId, e.target.checked);
+  });
+  menuPessoa.addEventListener('click', (e) => {
+    const acao = e.target.closest('[data-mt]')?.dataset.mt;
+    if (!acao) return;
+    fecharMenuPessoa();
+    if (acao === 'janela') emJanela ? fecharJanela(cartao.dataset.chave) : abrirEmJanela(cartao);
+    if (acao === 'cheia') cartao.requestFullscreen();
+    if (acao === 'parar') local ? chamada.pararTela() : chamada.assistir(peerId, false);
+  });
+}
+
+document.addEventListener('contextmenu', (e) => {
+  const cartao = e.target.closest('.cartao-video');
+  if (!cartao || !est.eu) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  abrirMenuTela(cartao, e.clientX, e.clientY);
+}, true);
+
+// ================= Menu de botão direito nas pessoas =================
+// Funciona na lista de canais, no palco da voz e na lista de membros.
+
+let menuPessoa = null;
+
+function fecharMenuPessoa() {
+  menuPessoa?.remove();
+  menuPessoa = null;
+}
+
+function abrirMenuPessoa(userId, x, y) {
+  fecharMenuPessoa();
+  const ehEu = userId === est.eu.id;
+  const participante = [...voz.participantes.values()].find((p) => p.userId === userId);
+  const presenca = presencaDe(est.nestAtual).get(userId);
+  const canalDele = presenca?.voz && [...est.canais.values()].flat().find((c) => c.id === presenca.voz);
+  const volume = Math.round(chamada.volumeDe(userId) * 100);
+
+  let html = `<div class="mp-topo">${avatarHtml(userId)}<div><b>${esc(nomeDe(userId))}</b>${ehEu ? `<span>${esc(t('you'))}</span>` : ''}</div></div>`;
+  if (!ehEu) {
+    html += `<div class="mp-bloco">
+      <div class="mp-rotulo"><span>${esc(t('User volume'))}</span><b id="mp-vol-valor">${volume}%</b></div>
+      <input type="range" id="mp-vol" min="0" max="100" step="1" value="${volume}">
+    </div>
+    <label class="alternador mp-alternador">
+      <input type="checkbox" id="mp-mudo" ${chamada.mudoLocal(userId) ? 'checked' : ''}>
+      <span class="trilha"></span>
+      <span>${esc(t('Mute for me'))} <small>${esc(t('Only you stop hearing them.'))}</small></span>
+    </label>`;
+    if (participante?.aoVivo) {
+      html += `<button data-mp="assistir">${icone('olho')}${esc(t(participante.assistindo ? 'Stop watching' : 'Watch stream'))}</button>`;
+    }
+    if (canalDele && voz.canalId !== canalDele.id) {
+      html += `<button data-mp="entrar">${icone('volume')}${esc(t('Join them in voice'))} · ${esc(canalDele.name)}</button>`;
+    }
+  }
+  html += `<button data-mp="copiar">${icone('copiar')}${esc(t('Copy name'))}</button>`;
+
+  menuPessoa = document.createElement('div');
+  menuPessoa.className = 'menu-pessoa';
+  menuPessoa.innerHTML = html;
+  document.body.appendChild(menuPessoa);
+  aplicarFala();
+  // posiciona sem sair da janela
+  const r = menuPessoa.getBoundingClientRect();
+  menuPessoa.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`;
+  menuPessoa.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`;
+
+  menuPessoa.addEventListener('input', (e) => {
+    if (e.target.id !== 'mp-vol') return;
+    chamada.definirVolume(userId, Number(e.target.value) / 100);
+    $('#mp-vol-valor').textContent = `${e.target.value}%`;
+  });
+  menuPessoa.addEventListener('change', (e) => {
+    if (e.target.id !== 'mp-mudo') return;
+    chamada.definirMudoLocal(userId, e.target.checked);
+    renderCanais();
+    if (est.vista === 'voz') renderPalco();
+  });
+  menuPessoa.addEventListener('click', async (e) => {
+    const acao = e.target.closest('[data-mp]')?.dataset.mp;
+    if (!acao) return;
+    fecharMenuPessoa();
+    if (acao === 'assistir') chamada.assistir(participante.peerId, !participante.assistindo);
+    if (acao === 'entrar') {
+      if (est.nestAtual !== canalDele.nest_id) abrirNest(canalDele.nest_id);
+      abrirCanal(canalDele);
+    }
+    if (acao === 'copiar') {
+      await navigator.clipboard.writeText(nomeDe(userId));
+      aviso(t('Copied!'));
+    }
+  });
+}
+
+document.addEventListener('contextmenu', (e) => {
+  const alvo = e.target.closest('[data-usuario], .cartao-pessoa[data-fala], .msg [data-fala]');
+  if (!alvo || !est.eu) return;
+  const userId = alvo.dataset.usuario || alvo.dataset.fala;
+  if (!est.perfis.has(userId)) return;
+  e.preventDefault();
+  abrirMenuPessoa(userId, e.clientX, e.clientY);
+});
+document.addEventListener('mousedown', (e) => {
+  if (menuPessoa && !menuPessoa.contains(e.target)) fecharMenuPessoa();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') fecharMenuPessoa();
+});
+window.addEventListener('blur', fecharMenuPessoa);
 
 // ================= Seletor de tela =================
 
@@ -1047,6 +1295,8 @@ $('#btn-config').onclick = async () => {
   seletorMic.definir(lista('audioinput'), ler('herald-mic') || 'default');
   seletorSaida.definir(lista('audiooutput'), chamada.saidaAtual() || 'default');
   atualizarOpcoesAudio();
+  $('#chk-esconder-ip').checked = chamada.esconderIp();
+  atualizarAvisoRede();
   $('#dlg-config').showModal();
 
   // Medidor em dB (-60 a 0); a marquinha é o volume ideal da fala (-18 dB)
@@ -1082,25 +1332,51 @@ $('#rng-ganho').oninput = (e) => {
   chamada.configurarAudio({ ganho: Number(e.target.value) });
   atualizarOpcoesAudio();
 };
+function atualizarAvisoRede() {
+  const el = $('#aviso-rede');
+  el.className = 'aviso-rede';
+  if (!chamada.esconderIp()) return (el.textContent = '');
+  if (!voz.conectado) return (el.textContent = t('Applies when you join a voice channel.'));
+  el.textContent = t(chamada.rede.viaApoio ? 'Protected: your IP is hidden in this call.' : 'Relay unavailable right now — connecting directly.');
+  el.classList.add(chamada.rede.viaApoio ? 'ok' : 'ruim');
+}
+$('#chk-esconder-ip').onchange = async (e) => {
+  chamada.definirEsconderIp(e.target.checked);
+  // numa chamada, reconecta pra valer na hora
+  const canal = voz.canalId && [...est.canais.values()].flat().find((c) => c.id === voz.canalId);
+  if (canal) {
+    await chamada.sair();
+    await entrarNaVoz(canal);
+  }
+  atualizarAvisoRede();
+};
+
 $('#chk-eco').onchange = (e) => {
   chamada.configurarAudio({ eco: e.target.checked });
   atualizarOpcoesAudio();
 };
 
+// Teste: grava 5 s e depois toca o que a galera ouviria
 let testeLigado = false;
-function ligarTeste() {
+function textoTeste(chave, vars) {
+  const b = $('#btn-testar-mic');
+  b.textContent = t(chave, vars);
+  b.dataset.i18nOriginal = chave;
+}
+async function ligarTeste() {
   testeLigado = true;
-  chamada.testarMicrofone(true);
-  $('#btn-testar-mic').dataset.i18nOriginal = 'Stop test';
   $('#btn-testar-mic').classList.add('ligado');
-  traduzirPagina($('#dlg-config'));
+  await chamada.testarMicrofone(5, (fase, falta) => {
+    if (fase === 'gravando') textoTeste('Recording… talk now ({n})', { n: falta });
+    if (fase === 'tocando') textoTeste('Playing back — this is how you sound');
+  });
+  pararTeste();
 }
 function pararTeste() {
   testeLigado = false;
-  chamada.testarMicrofone(false);
-  $('#btn-testar-mic').dataset.i18nOriginal = 'Test microphone (hear yourself)';
+  chamada.pararTeste();
   $('#btn-testar-mic').classList.remove('ligado');
-  traduzirPagina($('#dlg-config'));
+  textoTeste('Test microphone (record 5 seconds)');
 }
 $('#btn-testar-mic').onclick = () => (testeLigado ? pararTeste() : ligarTeste());
 

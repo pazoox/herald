@@ -434,3 +434,46 @@ select option { background: var(--panel); }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Menu de botão direito nas pessoas ---------- */
+.menu-pessoa {
+  position: fixed; z-index: 95; width: 260px; background: var(--panel-2); border-radius: 16px; padding: 8px;
+  box-shadow: 0 18px 50px #000d, inset 0 0 0 1px var(--line-strong); display: flex; flex-direction: column; gap: 2px;
+  animation: subir .12s ease;
+}
+.mp-topo { display: flex; align-items: center; gap: 10px; padding: 6px 6px 10px; border-bottom: 1px solid var(--line-strong); margin-bottom: 6px; }
+.mp-topo .avatar { width: 36px; height: 36px; font-size: 14px; }
+.mp-topo b { display: block; font-weight: 800; }
+.mp-topo span { font-size: 12px; color: var(--text-3); }
+.mp-bloco { padding: 6px 8px 8px; }
+.mp-rotulo { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
+.mp-rotulo b { font-family: var(--mono); color: var(--text); }
+.mp-bloco input { width: 100%; accent-color: var(--accent); }
+.mp-alternador { padding: 6px 8px; font-size: 13px; }
+.menu-pessoa > button {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; font-weight: 600; font-size: 13px;
+  color: var(--text-2); text-align: left;
+}
+.menu-pessoa > button svg.i { width: 17px; height: 17px; }
+.menu-pessoa > button:hover { background: var(--accent); color: var(--accent-ink); }
+.mudo-local { color: var(--orange); display: grid; }
+.voz-pessoa, .membro, .cartao-pessoa { cursor: default; }
+
+/* Atualização pronta */
+.nest-botao.atualizar { background: var(--lima); color: #12140a; animation: pulsar 2s ease-in-out infinite; }
+@keyframes pulsar { 50% { box-shadow: 0 0 0 6px #d6f36a33; } }
+.aviso-rede { margin: -6px 0 0 50px; font-size: 12px; font-weight: 600; color: var(--text-3); min-height: 1em; }
+.aviso-rede.ok { color: var(--lima); }
+.aviso-rede.ruim { color: var(--orange); }
+/* Transmissão: estatísticas fixas, aviso de "em outra janela", item perigoso do menu */
+.cartao-video.stats-fixas .sobre .stats { opacity: 1; }
+.cartao-video.stats-fixas .sobre { opacity: 1; background: none; }
+.cartao-video.stats-fixas .sobre .linha.baixo { opacity: 0; transition: opacity .2s; }
+.cartao-video.stats-fixas:hover .sobre { background: linear-gradient(#0009, transparent 25%, transparent 75%, #0009); }
+.cartao-video.stats-fixas:hover .sobre .linha.baixo { opacity: 1; }
+.em-janela { display: none; position: absolute; inset: 0; background: #0b0a0ff2; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-2); font-weight: 700; }
+.cartao-video.popout .em-janela { display: flex; }
+.em-janela button { background: var(--panel-2); color: var(--text); padding: 9px 16px; border-radius: 999px; font-weight: 700; }
+.em-janela button:hover { background: var(--accent); color: var(--accent-ink); }
+.menu-pessoa > button.perigo { color: var(--danger); }
+.menu-pessoa > button.perigo:hover { background: var(--danger); color: #fff; }

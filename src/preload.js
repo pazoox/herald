@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('herald', {
     gravar: (chave, valor) => ipcRenderer.invoke('sessao-gravar', chave, valor),
     apagar: (chave) => ipcRenderer.invoke('sessao-apagar', chave),
   },
+  // Atualização automática
+  aoAtualizar: (fn) => ipcRenderer.on('atualizacao', (_e, dados) => fn(dados)),
+  instalarAtualizacao: () => ipcRenderer.invoke('instalar-atualizacao'),
   // Convites: o que abriu o app + os que chegarem depois
   aoConvite: (fn) => {
     ipcRenderer.on('convite', (_e, codigo) => fn(codigo));
