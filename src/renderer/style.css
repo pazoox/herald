@@ -144,6 +144,24 @@ select option { background: var(--panel); }
   background: var(--panel-3); flex-shrink: 0; overflow: hidden; transition: box-shadow .12s;
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
+/* pixel art: nítido quando ampliado; nos tamanhos pequenos o navegador reduz suave */
+.avatar.grande img, .opcao-avatar img { image-rendering: pixelated; }
+.avatar.grande.com-avatar { width: 64px; height: 64px; }
+
+/* Perfil: escolha de avatar e cor do fundo */
+.grade-avatares { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; margin-bottom: 4px; }
+.opcao-avatar {
+  aspect-ratio: 1; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  font-weight: 800; font-size: 18px; color: #fff; transition: transform .1s, box-shadow .12s;
+}
+.opcao-avatar img { width: 100%; height: 100%; }
+.opcao-avatar:hover { transform: scale(1.06); }
+.opcao-avatar.ligado { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
+.cores-avatar { display: flex; flex-wrap: wrap; gap: 8px; }
+.cores-avatar.desligado { opacity: .35; pointer-events: none; }
+.opcao-cor { width: 28px; height: 28px; border-radius: 50%; box-shadow: inset 0 0 0 1px #ffffff1f; transition: transform .1s; }
+.opcao-cor:hover { transform: scale(1.1); }
+.opcao-cor.ligado { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
 .avatar.mini { width: 22px; height: 22px; font-size: 10px; }
 .avatar.grande { width: 72px; height: 72px; font-size: 26px; }
 .avatar.falando { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--lima); }

@@ -71,10 +71,24 @@ function gradiente(semente) {
   for (const c of String(semente)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return `var(${GRADIENTES[h % GRADIENTES.length]})`;
 }
+// Avatares prontos (pixel art 64x64 em src/renderer/avatares) + cor de fundo escolhida à parte
+const AVATARES = [
+  ['cavaleiro', 'Knight'], ['mago', 'Wizard'], ['orc', 'Orc'], ['elfo', 'Elf'], ['olympian', 'Olympian'],
+  ['ghost', 'Ghost'], ['spartan', 'Spartan'], ['medico-peste', 'Plague doctor'], ['valquiria', 'Valkyrie'],
+  ['viking', 'Viking'], ['bruxa', 'Witch'], ['samurai', 'Samurai'], ['soldier', 'Soldier'], ['pilot', 'Pilot'],
+  ['racer', 'Racer'], ['astronaut', 'Astronaut'],
+];
+const AVATAR_IDS = new Set(AVATARES.map(([id]) => id));
+const CORES_AVATAR = ['#1c1b22', '#3a4254', '#2d4a7a', '#2a5450', '#3d5a2a', '#b08a52', '#6e2c26', '#8a3a5a', '#5a3f8a', '#7a7a85'];
+const COR_AVATAR_PADRAO = '#3a4254';
+
 function avatarHtml(userId, classe = '') {
   const p = est.perfis.get(userId);
   const nome = p?.display_name || '?';
-  if (p?.avatar_url) return `<div class="avatar ${classe}" data-fala="${userId}"><img src="${esc(p.avatar_url)}" alt=""></div>`;
+  if (p?.avatar && AVATAR_IDS.has(p.avatar)) {
+    const cor = /^#[0-9a-f]{6}$/.test(p.avatar_cor || '') ? p.avatar_cor : COR_AVATAR_PADRAO;
+    return `<div class="avatar com-avatar ${classe}" data-fala="${userId}" style="background:${cor}"><img src="avatares/${p.avatar}.png" alt=""></div>`;
+  }
   return `<div class="avatar ${classe}" data-fala="${userId}" style="background:${gradiente(userId)}">${esc(nome[0].toUpperCase())}</div>`;
 }
 function nomeDe(userId) {
@@ -1959,7 +1973,7 @@ $('#btn-config').onclick = async () => {
   $('#perfil-nome').value = est.eu.display_name;
   sb?.auth.getUser().then(({ data }) => ($('#perfil-email').value = data?.user?.email || ''));
   window.herald?.versao?.().then((v) => ($('#config-versao').textContent = `Herald ${v}`));
-  $('#perfil-avatar').outerHTML = avatarHtml(est.eu.id, 'grande').replace('class="avatar ', 'id="perfil-avatar" class="avatar ');
+  renderEscolhaAvatar();
   if (sb && !DEMO) {
     sb.rpc('is_ceo').then(({ data }) => {
       ehCeo = Boolean(data);
@@ -2221,6 +2235,46 @@ $('#btn-salvar-perfil').onclick = async () => {
   render();
 };
 
+// Perfil: escolher avatar pronto e a cor do fundo (salva na hora)
+function renderEscolhaAvatar() {
+  const eu = est.eu;
+  $('#perfil-avatar').outerHTML = avatarHtml(eu.id, 'grande').replace('class="avatar ', 'id="perfil-avatar" class="avatar ');
+  const corAtual = eu.avatar_cor || COR_AVATAR_PADRAO;
+  $('#grade-avatares').innerHTML =
+    `<button class="opcao-avatar sem ${eu.avatar ? '' : 'ligado'}" data-avatar="" data-tip="${esc(t('No avatar'))}" style="background:${gradiente(eu.id)}">${esc((eu.display_name || '?')[0].toUpperCase())}</button>` +
+    AVATARES.map(([id, nome]) =>
+      `<button class="opcao-avatar ${eu.avatar === id ? 'ligado' : ''}" data-avatar="${id}" data-tip="${esc(t(nome))}" style="background:${corAtual}"><img src="avatares/${id}.png" alt=""></button>`).join('');
+  $('#cores-avatar').innerHTML = CORES_AVATAR.map((c) =>
+    `<button class="opcao-cor ${corAtual === c ? 'ligado' : ''}" data-cor="${c}" style="background:${c}"></button>`).join('');
+  $('#cores-avatar').classList.toggle('desligado', !eu.avatar);
+}
+
+async function salvarAvatar(mudanca) {
+  const novo = { ...est.eu, ...mudanca };
+  est.eu = novo;
+  est.perfis.set(novo.id, novo);
+  renderEscolhaAvatar();
+  render();
+  if (DEMO || !sb) return;
+  const { data, error } = await sb.from('profiles').update(mudanca).eq('id', novo.id).select().single();
+  if (error) return aviso(traduzirErro(error));
+  est.eu = data;
+  est.perfis.set(data.id, data);
+}
+
+$('#grade-avatares').onclick = (e) => {
+  const b = e.target.closest('[data-avatar]');
+  if (!b) return;
+  const avatar = b.dataset.avatar || null;
+  if (avatar === (est.eu.avatar || null)) return;
+  salvarAvatar(avatar && !est.eu.avatar_cor ? { avatar, avatar_cor: COR_AVATAR_PADRAO } : { avatar });
+};
+$('#cores-avatar').onclick = (e) => {
+  const b = e.target.closest('[data-cor]');
+  if (!b || !est.eu.avatar || b.dataset.cor === est.eu.avatar_cor) return;
+  salvarAvatar({ avatar_cor: b.dataset.cor });
+};
+
 // Página "Herald" (só CEO): código do dia pra quem vai criar conta
 let ehCeo = false;
 async function carregarCodigoDia() {
@@ -2262,7 +2316,8 @@ function montarDemo() {
     ['u-eu', 'Pazi'], ['u-lu', 'Lu'], ['u-beto', 'Beto'], ['u-gui', 'Gui'],
     ['u-nina', 'Nina'], ['u-caio', 'Caio'], ['u-theo', 'Theo'], ['u-bia', 'Bia'],
   ];
-  for (const [id, nome] of pessoas) est.perfis.set(id, { id, display_name: nome, avatar_url: null });
+  const demoAvatares = { 'u-lu': ['valquiria', '#2a5450'], 'u-beto': ['cavaleiro', '#6e2c26'], 'u-gui': ['orc', '#b08a52'], 'u-nina': ['bruxa', '#5a3f8a'], 'u-caio': ['samurai', '#1c1b22'], 'u-theo': ['astronaut', '#2d4a7a'] };
+  for (const [id, nome] of pessoas) est.perfis.set(id, { id, display_name: nome, avatar: demoAvatares[id]?.[0] || null, avatar_cor: demoAvatares[id]?.[1] || null });
   est.eu = est.perfis.get('u-eu');
 
   const nests = [

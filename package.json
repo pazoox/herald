@@ -1,7 +1,7 @@
 {
   "name": "herald",
   "productName": "Herald",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "Voz e compartilhamento de tela pra jogar com os amigos",
   "author": "Herald",
@@ -48,6 +48,7 @@
       "src/renderer/janela-tela.html",
       "src/renderer/dist/**",
       "src/renderer/marca/**",
+      "src/renderer/avatares/**",
       "build/icon.png"
     ],
     "win": {

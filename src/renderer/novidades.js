@@ -3,6 +3,25 @@
 
 export const NOVIDADES = [
   {
+    versao: '1.7.0',
+    en: {
+      novas: [
+        'Avatars are here: pick one of 16 pixel-art characters in Settings → Profile (Knight, Wizard, Orc, Elf, Valkyrie, Viking, Witch, Samurai, Astronaut and more).',
+        'Choose the background color of your avatar separately, so the same character can look different for each person.',
+        'Your avatar shows everywhere: members list, calls, chat and menus.',
+      ],
+      correcoes: [],
+    },
+    pt: {
+      novas: [
+        'Chegaram os avatares: escolha um dos 16 personagens em pixel art em Settings → Profile (Cavaleiro, Mago, Orc, Elfo, Valquíria, Viking, Bruxa, Samurai, Astronauta e mais).',
+        'Escolha a cor de fundo do avatar separada, então o mesmo personagem pode ficar diferente pra cada um.',
+        'Seu avatar aparece em todo lugar: lista de membros, calls, chat e menus.',
+      ],
+      correcoes: [],
+    },
+  },
+  {
     versao: '1.6.0',
     en: {
       novas: [
