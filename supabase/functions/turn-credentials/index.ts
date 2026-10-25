@@ -10,7 +10,7 @@
 // trava pega rápido.
 //
 // A chave da Cloudflare fica só aqui (segredos do Supabase), nunca no app.
-// Só quem está logado consegue chamar (verificação de JWT ligada).
+// Só quem está logado E faz parte de algum Nest consegue chamar.
 //
 // Segredos (Supabase → Edge Functions → Secrets):
 //   CLOUDFLARE_TURN_KEY_ID       ID da chave TURN
@@ -18,6 +18,8 @@
 //   CLOUDFLARE_ACCOUNT_ID        ID da conta (pra ler o uso)
 //   CLOUDFLARE_ANALYTICS_TOKEN   token com permissão "Account Analytics: Read"
 //   TURN_LIMITE_GB               opcional, padrão 800
+
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -64,6 +66,17 @@ Deno.serve(async (req) => {
   const id = Deno.env.get('CLOUDFLARE_TURN_KEY_ID');
   const token = Deno.env.get('CLOUDFLARE_TURN_API_TOKEN');
   if (!id || !token) return resposta({ iceServers: [], erro: 'TURN não configurado' });
+
+  // Só membros de algum Nest: conta solta não gasta o limite da Cloudflare.
+  // (a consulta roda como a própria pessoa, então as regras do banco valem)
+  const pessoa = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: usuario } = await pessoa.auth.getUser();
+  if (!usuario?.user) return resposta({ iceServers: [], erro: 'sem login' });
+  const { count } = await pessoa.from('nest_members').select('nest_id', { count: 'exact', head: true }).eq('user_id', usuario.user.id);
+  if (!count) return resposta({ iceServers: [], erro: 'sem nest' });
 
   // Trava de gasto. Se a consulta falhar, NÃO entrega (melhor sem apoio do que pagar).
   const conta = Deno.env.get('CLOUDFLARE_ACCOUNT_ID');

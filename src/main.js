@@ -125,6 +125,19 @@ async function buscarFaixa(texto) {
   return buscarNoYoutube(texto); // nome da música
 }
 
+// Qual processo é dono de uma janela (HWND)? Pergunta pro Windows pelo PowerShell
+// (só acontece ao começar a transmitir uma janela com o som dela).
+function pidDaJanela(hwnd) {
+  const { execFile } = require('child_process');
+  const script = `Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr h, out uint p);'; $p = 0; [void][W.U]::GetWindowThreadProcessId([System.IntPtr]${Math.trunc(hwnd)}, [ref]$p); $p`;
+  return new Promise((pronto) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 }, (erro, saida) => {
+      const pid = Number(String(saida || '').trim());
+      pronto(!erro && pid > 0 ? pid : null);
+    });
+  });
+}
+
 // Tamanho/posição da janela: lembra o último; na primeira vez ocupa ~85% da tela
 const ARQUIVO_JANELA = () => path.join(app.getPath('userData'), 'janela.json');
 
@@ -266,6 +279,36 @@ app.whenReady().then(() => {
   ipcMain.handle('escolher-fonte', (_e, id, audio) => {
     escolha = { id, audio: Boolean(audio) };
   });
+
+  // Som só da janela compartilhada: descobre o programa dono da janela e captura só o
+  // som dele (e dos processos filhos — navegadores tocam som num processo à parte).
+  // Usa a captura por processo do Windows (10 versão 2004+ / 11) via loopback-capture.
+  let capturaJanela = null;
+  const pararCapturaJanela = () => {
+    try { capturaJanela?.stop(); } catch {}
+    capturaJanela = null;
+  };
+  ipcMain.handle('audio-janela-iniciar', async (e, fonteId) => {
+    pararCapturaJanela();
+    const hwnd = Number(String(fonteId).split(':')[1]);
+    if (!hwnd || process.platform !== 'win32') return { ok: false };
+    const pid = await pidDaJanela(hwnd);
+    if (!pid) return { ok: false };
+    try {
+      const { LoopbackCapture } = require('loopback-capture');
+      capturaJanela = new LoopbackCapture();
+      const destino = e.sender;
+      capturaJanela.start(pid, true, (pedaco) => {
+        if (!destino.isDestroyed()) destino.send('audio-janela', pedaco); // PCM 16-bit, estéreo, 48 kHz
+      });
+      return { ok: true, pid };
+    } catch (err) {
+      console.error('audio da janela:', err?.message);
+      pararCapturaJanela();
+      return { ok: false };
+    }
+  });
+  ipcMain.handle('audio-janela-parar', () => pararCapturaJanela());
 
   // Login: guardado num arquivo criptografado pelo Windows (sobrevive a fechar o app de qualquer jeito)
   ipcMain.handle('sessao-ler', (_e, chave) => lerSessao()[chave] ?? null);

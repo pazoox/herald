@@ -163,6 +163,21 @@ const PT = {
   'Pick people at random': 'Sorteia pessoas da chamada',
   'Join the voice channel first': 'Entre no canal de voz primeiro',
   'Radio': 'Rádio',
+  'Access code': 'Código de acesso',
+  'Ask the person who invited you': 'Peça pra quem te convidou',
+  'Avatars coming soon': 'Avatares em breve',
+  'Icons coming soon': 'Ícones em breve',
+  'This name is already taken. Try another one.': 'Esse nome já está em uso. Tente outro.',
+  'Wrong access code. Codes change every day.': 'Código de acesso errado. Ele muda todo dia.',
+  'This email does not look right.': 'Esse email não parece certo.',
+  'Update Herald to create an account.': 'Atualize o Herald pra criar uma conta.',
+  'New people need this code to create an account. It changes every day at {time}.': 'Quem for criar conta precisa deste código. Ele muda todo dia às {time}.',
+  'Members · {online} of {total} online': 'Membros · {online} de {total} online',
+  'Paused': 'Pausado',
+  '{time} left': 'faltam {time}',
+  'Your stream · {fps} of {alvo} fps': 'Sua transmissão · {fps} de {alvo} fps',
+  'System · PC CPU at {cpu}%': 'Sistema · CPU do PC em {cpu}%',
+  'System': 'Sistema',
   'Coming soon': 'Em breve',
   "Who's in": 'Quem entra',
   'How many to pick': 'Quantos sortear',
@@ -196,6 +211,19 @@ const PT = {
   'Your PC (CPU)': 'Seu PC (CPU)',
   'Herald (CPU)': 'Herald (CPU)',
   'Memory: Herald {h} MB · PC {p}% in use': 'Memória: Herald {h} MB · PC {p}% em uso',
+  Deafened: 'Surdo',
+  Muted: 'Mutado',
+  'Mic on': 'Mic ligado',
+  'Show pop-up': 'Mostrar pop-up',
+  'Hide pop-up': 'Esconder pop-up',
+  'Open in panel': 'Abrir no painel',
+  'Window audio': 'Som da janela',
+  'only the sound of this window — not the rest of your PC': 'só o som desta janela — não o resto do PC',
+  "Couldn't capture only this window's sound — sharing your PC audio instead": 'Não deu pra pegar só o som desta janela — mandando o som do PC',
+  'Mute stream': 'Mutar transmissão',
+  'only for you': 'só pra você',
+  'Share PC audio': 'Mandar o som do PC',
+  'turn off to send only the image': 'desligue pra mandar só a imagem',
   'Expand panel': 'Abrir painel',
   'Collapse panel': 'Recolher painel',
   System: 'Sistema',
@@ -353,7 +381,7 @@ export function traduzirPagina(raiz = document) {
   }
   for (const el of raiz.querySelectorAll('[data-i18n-placeholder]')) el.placeholder = t(el.dataset.i18nPlaceholder);
   for (const el of raiz.querySelectorAll('[data-i18n-tip]')) el.dataset.tip = t(el.dataset.i18nTip);
-  for (const el of raiz.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
+  for (const el of raiz.querySelectorAll('[data-i18n-title]')) el.dataset.tip = t(el.dataset.i18nTitle); // balão do Herald, não a dica do Windows
 }
 
 export function horaCurta(data) {

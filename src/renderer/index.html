@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="dist/app.css">
 </head>
 <body>
-  <div class="barra-titulo"></div>
+  <div class="barra-titulo"><span>Herald</span></div>
 
   <!-- ============ Carregando ============ -->
   <section id="carregando" class="carregando">
@@ -33,6 +33,10 @@
         <label class="campo">
           <span data-i18n>Password</span>
           <input id="ent-senha" type="password" required minlength="6" autocomplete="current-password" data-i18n-placeholder="At least 6 characters">
+        </label>
+        <label class="campo" id="campo-codigo" hidden>
+          <span data-i18n>Access code</span>
+          <input id="ent-codigo" maxlength="12" autocomplete="off" spellcheck="false" data-i18n-placeholder="Ask the person who invited you">
         </label>
         <button type="submit" class="botao-primario" id="btn-entrar" data-i18n>Sign in</button>
         <p id="erro-entrada" class="erro"></p>
@@ -61,21 +65,20 @@
         </header>
         <div class="canais-lista" id="canais-lista"></div>
 
-        <div id="painel-voz" class="painel-voz" hidden>
-          <div class="pv-info">
-            <span class="pv-status" data-i18n>Voice connected</span>
-            <span class="pv-onde" id="pv-onde"></span>
+        <!-- Cartão do usuário: você + (na call) a faixa da call. Compartilhar/sair ficam na barra da call -->
+        <div class="cartao-eu" id="cartao-eu">
+          <button class="ce-call" id="ce-call" hidden>
+            <i class="ce-pulso"></i>
+            <span class="ce-onde"><b id="ce-canal"></b><small id="ce-nest"></small></span>
+            <span class="ce-ping" id="ce-ping"></span>
+          </button>
+          <div class="ce-perfil">
+            <div id="eu-avatar" class="avatar"></div>
+            <div class="pu-info"><span id="eu-nome"></span><span class="pu-sub" id="eu-sub"></span></div>
+            <button id="btn-mudo" class="botao-icone" data-icone="mic"></button>
+            <button id="btn-surdo" class="botao-icone" data-icone="fone"></button>
+            <button id="btn-config" class="botao-icone" data-i18n-tip="Settings" data-icone="ajustes"></button>
           </div>
-          <button id="btn-tela-pv" class="botao-icone" data-i18n-title="Share screen" data-icone="tela"></button>
-          <button id="btn-desconectar" class="botao-icone perigo" data-i18n-title="Disconnect" data-icone="sair"></button>
-        </div>
-
-        <div class="painel-usuario">
-          <div id="eu-avatar" class="avatar"></div>
-          <div class="pu-info"><span id="eu-nome"></span><span class="pu-sub" id="eu-sub"></span></div>
-          <button id="btn-mudo" class="botao-icone" data-icone="mic"></button>
-          <button id="btn-surdo" class="botao-icone" data-icone="fone"></button>
-          <button id="btn-config" class="botao-icone" data-i18n-title="Settings" data-icone="ajustes"></button>
         </div>
       </aside>
 
@@ -102,7 +105,6 @@
 
         <div id="vista-voz" class="vista" hidden>
           <header class="vista-topo"><span data-icone="volume" class="vt-icone"></span><span id="voz-nome"></span>
-            <div class="ferramentas"><button id="btn-ferramentas" class="botao-icone" data-i18n-title="Tools" data-icone="ferramentas"></button><div id="menu-ferramentas" class="menu menu-ferramentas" hidden></div></div>
           </header>
           <section id="palco" class="palco">
             <div id="palco-videos" class="palco-videos"></div>
@@ -114,6 +116,7 @@
               <button id="doca-mudo" class="doca-botao" data-icone="mic"></button>
               <button id="doca-surdo" class="doca-botao" data-icone="fone"></button>
               <button id="doca-tela" class="doca-botao" data-icone="tela"></button>
+              <div class="ferramentas"><button id="btn-ferramentas" class="doca-botao" data-i18n-tip="Tools" data-icone="ferramentas"></button><div id="menu-ferramentas" class="menu menu-ferramentas" hidden></div></div>
               <span class="doca-sep"></span>
               <button id="doca-sair" class="doca-botao perigo" data-i18n-tip="Disconnect" data-icone="sair"></button>
             </div>
@@ -144,14 +147,13 @@
         <!-- aberto -->
         <div class="lateral-aberto">
           <div class="lateral-topo">
-            <div class="segmentado lateral-abas">
-              <button data-aba-lateral="membros"><span data-i18n>Members</span></button>
-              <button data-aba-lateral="radio" hidden><span data-i18n>Radio</span></button>
-              <button data-aba-lateral="sistema"><span data-i18n>System</span></button>
+            <button class="botao-icone pequeno lateral-recolher" data-lateral="fechar" data-i18n-tip="Collapse panel"><span data-icone="seta-direita"></span></button>
+            <div class="lateral-nome">
+              <span data-titulo-lateral="membros" data-i18n>Members</span><span data-titulo-lateral="membros" id="contagem-membros"></span>
+              <span data-titulo-lateral="radio" data-i18n>Radio</span>
+              <span data-titulo-lateral="sistema" data-i18n>System</span>
             </div>
-            <button class="botao-icone pequeno" data-lateral="fechar" data-i18n-tip="Collapse panel"><span data-icone="painel"></span></button>
           </div>
-          <div class="lateral-titulo-membros"><span data-i18n>Members</span> <span id="contagem-membros"></span></div>
           <div id="membros" class="membros"></div>
           <div id="painel-radio" class="painel-radio" hidden><p class="sistema-vazio" id="painel-radio-vazio"></p></div>
           <div id="sistema" class="sistema" hidden></div>
@@ -269,7 +271,7 @@
         <label class="alternador">
           <input type="checkbox" id="com-audio" checked>
           <span class="trilha"></span>
-          <span><span data-i18n>PC audio</span> <small data-i18n>games, videos, music — Herald's own sounds stay out</small></span>
+          <span><span id="audio-rotulo">PC audio</span> <small id="audio-desc">games, videos, music — Herald's own sounds stay out</small></span>
         </label>
       </div>
       <button id="btn-iniciar-tela" class="botao-primario" disabled data-i18n>Go live</button>
@@ -283,6 +285,7 @@
       <button data-pagina="perfil" class="ligado"><span data-icone="pessoa"></span><span data-i18n>Profile</span></button>
       <button data-pagina="audio"><span data-icone="fone"></span><span data-i18n>Audio</span></button>
       <button data-pagina="preferencias"><span data-icone="ajustes"></span><span data-i18n>Preferences</span></button>
+      <button data-pagina="herald" id="menu-herald" hidden><span data-icone="convite"></span><span>Herald</span></button>
       <div class="config-menu-fim">
         <button id="btn-sair-conta" class="config-sair"><span data-icone="porta"></span><span data-i18n>Sign out</span></button>
         <small id="config-versao"></small>
@@ -295,11 +298,10 @@
       <section class="config config-pagina" data-pagina="perfil">
         <h3 data-i18n>Profile</h3>
         <div class="perfil-cartao">
-          <label class="perfil-foto" id="perfil-foto">
-            <input type="file" id="perfil-arquivo" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+          <div class="perfil-foto sem-troca" id="perfil-foto">
             <div id="perfil-avatar" class="avatar grande"></div>
-            <span data-i18n>Change photo</span>
-          </label>
+            <span data-i18n>Avatars coming soon</span>
+          </div>
           <div class="perfil-campos">
             <label class="campo">
               <span data-i18n>Display name</span>
@@ -388,6 +390,17 @@
           <small data-i18n>Work even with your game open.</small>
         </div>
       </section>
+
+      <!-- Herald (só CEO) -->
+      <section class="config config-pagina" data-pagina="herald" hidden>
+        <h3>Herald</h3>
+        <div class="secao-titulo" data-i18n>Access code</div>
+        <div class="codigo-dia">
+          <code id="codigo-dia">········</code>
+          <button id="btn-copiar-codigo" class="botao-secundario" data-i18n>Copy</button>
+        </div>
+        <small class="texto-3" id="codigo-dia-info"></small>
+      </section>
     </div>
   </dialog>
 
@@ -407,11 +420,10 @@
       <section class="config config-pagina" data-pagina-nest="geral">
         <h3 data-i18n>Overview</h3>
         <div class="perfil-cartao">
-          <label class="perfil-foto" id="nest-icone-foto">
-            <input type="file" id="nest-icone-arquivo" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+          <div class="perfil-foto sem-troca" id="nest-icone-foto">
             <span id="nest-icone" class="nest-icone-grande"></span>
-            <span data-i18n>Change icon</span>
-          </label>
+            <span data-i18n>Icons coming soon</span>
+          </div>
           <div class="perfil-campos">
             <label class="campo">
               <span data-i18n>Nest name</span>
@@ -460,7 +472,7 @@
   <section id="radio" class="radio" hidden>
     <header class="radio-topo" id="radio-topo">
       <span class="radio-marca"><span data-icone="radio"></span><b data-i18n>Radio</b></span>
-      <button class="botao-icone pequeno" id="radio-recolher"></button>
+      <button class="botao-icone pequeno" id="radio-esconder"><span data-icone="esconder"></span></button>
       <button class="botao-icone pequeno" id="radio-fechar"><span data-icone="x"></span></button>
     </header>
     <div class="radio-tela" id="radio-tela"></div>

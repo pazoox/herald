@@ -51,7 +51,7 @@ function criarPlayer(caixa, faixa, inicio, aoEvento) {
   const p = { uid: faixa.uid, tempo: inicio, quando: performance.now(), duracao: 0, tocando: false, pronto: false, desde: performance.now() };
 
   if (faixa.tipo === 'youtube') {
-    f.src = `https://www.youtube-nocookie.com/embed/${faixa.id}?enablejsapi=1&autoplay=1&controls=0&disablekb=1&rel=0&playsinline=1&iv_load_policy=3&cc_load_policy=0&start=${Math.floor(inicio)}&origin=${encodeURIComponent(location.origin)}`;
+    f.src = `https://www.youtube-nocookie.com/embed/${faixa.id}?enablejsapi=1&autoplay=1&controls=0&disablekb=1&rel=0&playsinline=1&iv_load_policy=3&cc_load_policy=0&fs=0&modestbranding=1&start=${Math.floor(inicio)}&origin=${encodeURIComponent(location.origin)}`;
     const mandar = (dados) => f.contentWindow?.postMessage(JSON.stringify({ ...dados, id: 1, channel: 'widget' }), '*');
     const cmd = (func, args = []) => mandar({ event: 'command', func, args });
     // fica avisando que queremos ouvir os eventos até o player responder
@@ -76,6 +76,8 @@ function criarPlayer(caixa, faixa, inicio, aoEvento) {
     p.pausar = () => cmd('pauseVideo');
     p.irPara = (s) => cmd('seekTo', [s, true]);
     p.volume = (v) => { cmd('setVolume', [v]); cmd(v > 0 ? 'unMute' : 'mute'); };
+    // alguns clipes ligam a legenda sozinhos: no Rádio é só o vídeo rolando
+    p.semLegenda = () => { cmd('unloadModule', ['captions']); cmd('unloadModule', ['cc']); };
     p.parar = () => clearInterval(chamar);
   } else {
     f.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(faixa.id)}&auto_play=true&visual=true&hide_related=true&show_comments=false&show_reposts=false&show_teaser=false&sharing=false&buying=false&download=false&show_playcount=false&show_artwork=true`;
@@ -126,7 +128,9 @@ export function criarRadio(ctx) {
   let marco = performance.now();
   let aberto = false; // o player está tocando/visível pra mim
   let fechadoPorMim = false; // fechei: não reabre sozinho quando alguém mexe na fila
-  let recolhido = ler('herald-radio-recolhido') === '1';
+  // escondido: toca normalmente, sem o pop-up na tela (o anel da trilha mostra que está tocando).
+  // É o mesmo "lugar" da aba Rádio do painel: o player só fica invisível, a música não reinicia.
+  let escondido = ler('herald-radio-escondido') === '1';
   let verFila = false;
   let player = null;
   let volume = Number(ler('herald-radio-vol') ?? 50);
@@ -160,6 +164,8 @@ export function criarRadio(ctx) {
       if (!player || player.uid !== uid) return;
       if (ev === 'pronto') {
         player.volume(volumeReal());
+        player.semLegenda?.();
+        setTimeout(() => player?.semLegenda?.(), 1500); // a legenda às vezes carrega depois
         // SoundCloud não aceita "começar em": posiciona quando fica pronto
         if (estado.fila[0]?.tipo === 'soundcloud' && posAgora() > 1) player.irPara(posAgora());
         if (estado.pausado) player.pausar();
@@ -217,11 +223,10 @@ export function criarRadio(ctx) {
     el.hidden = !aberto;
     if (!aberto) return;
     const atual = estado.fila[0];
-    el.classList.toggle('recolhido', recolhido && !noPainel);
+    el.classList.toggle('escondido', escondido && !noPainel);
     el.classList.toggle('no-painel', noPainel);
     el.classList.toggle('vazio', !atual);
     el.classList.toggle('soundcloud', atual?.tipo === 'soundcloud');
-    $('#radio-recolher').innerHTML = icone(recolhido ? 'recolher' : 'expandir');
     $('#radio-titulo').textContent = atual ? atual.titulo : t('Nothing playing');
     $('#radio-autor').textContent = atual
       ? [atual.autor, atual.por && t('added by {name}', { name: ctx.nomeDe(atual.por) })].filter(Boolean).join(' · ')
@@ -285,10 +290,22 @@ export function criarRadio(ctx) {
     verFila = !verFila;
     render();
   };
-  $('#radio-recolher').onclick = () => {
-    recolhido = !recolhido;
-    guardar('herald-radio-recolhido', recolhido ? '1' : '0');
+  function definirEscondido(sim) {
+    escondido = sim;
+    guardar('herald-radio-escondido', sim ? '1' : '0');
     render();
+  }
+  $('#radio-esconder').onclick = () => definirEscondido(true);
+  const alternarPausa = () => {
+    if (estado.fila.length) alterar(() => (estado.pausado = !estado.pausado));
+  };
+  const pularMusica = () => {
+    if (!estado.fila.length) return;
+    alterar(() => {
+      estado.fila.shift();
+      estado.pos = 0;
+      estado.pausado = false;
+    });
   };
   $('#radio-fechar').onclick = () => {
     aberto = false;
@@ -379,10 +396,21 @@ export function criarRadio(ctx) {
     abrir() {
       aberto = true;
       fechadoPorMim = false;
-      if (recolhido && !estado.fila.length) recolhido = false;
+      escondido = false; // abrir pelo menu Ferramentas mostra o pop-up
+      guardar('herald-radio-escondido', '0');
       aplicar();
       if (!estado.fila.length) $('#radio-busca').focus();
     },
+    // controles rápidos (botão direito no anel do Rádio)
+    alternarPausa: () => alternarPausa(),
+    pular: () => pularMusica(),
+    mostrar: () => {
+      aberto = true;
+      fechadoPorMim = false;
+      definirEscondido(false);
+      aplicar();
+    },
+    esconder: () => definirEscondido(true),
     tocandoAlgo: () => estado.fila.length > 0,
     // pro anel da trilha: progresso da música e se está tocando
     info() {
@@ -392,6 +420,8 @@ export function criarRadio(ctx) {
         ativo: Boolean(atual),
         ligado: aberto || Boolean(atual), // o player está aberto ou tem música rolando na call
         tocando: Boolean(atual && !estado.pausado && aberto),
+        pausado: estado.pausado,
+        escondido: escondido && !noPainel,
         progresso: dur ? Math.min(1, posAgora() / dur) : 0,
         restante: dur ? Math.max(0, dur - posAgora()) : null,
         titulo: atual?.titulo || '',
@@ -447,7 +477,6 @@ export function criarRadio(ctx) {
       estado = { fila: fila.map(faixaValida).filter(Boolean), pausado: true, pos, v: 1 };
       marco = performance.now();
       aberto = true;
-      recolhido = false;
       aplicar();
     },
   };

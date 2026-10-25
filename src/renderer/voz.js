@@ -471,6 +471,38 @@ export async function entrar({ canalId, chave, userId, turn = [], sinal }) {
 
   voz.canalId = canalId;
   voz.conectado = true;
+  ligarSala(canalId, chave, turn, sinal);
+  tocarSom('entrou');
+  avisar('conexao');
+}
+
+// A senha da call mudou (alguém saiu ou foi expulso do Nest): troca pra sala nova
+// sem desligar o microfone nem a sua transmissão. Quem saiu fica sozinho na sala velha.
+let chaveAtual = null;
+let conexaoAtual = null; // { turn, sinal }
+let silencioAte = 0; // sem os sons de entrar enquanto a galera volta pra sala nova
+export async function trocarChave(chave) {
+  if (!sala || !chave || chave === chaveAtual) return;
+  const velha = sala;
+  sala = null;
+  acoes = {};
+  for (const p of voz.participantes.values()) {
+    if (p.audioEl) p.audioEl.srcObject = null;
+    soltarVoz(p);
+  }
+  voz.participantes.clear();
+  voz.espectadores.clear();
+  preferenciasTela.clear();
+  for (const id of [...analisadores.keys()]) if (id !== 'eu') analisadores.delete(id);
+  silencioAte = Date.now() + 6000;
+  await velha.leave();
+  ligarSala(voz.canalId, chave, conexaoAtual.turn, conexaoAtual.sinal);
+  avisar('participantes');
+}
+
+function ligarSala(canalId, chave, turn, sinal) {
+  chaveAtual = chave;
+  conexaoAtual = { turn, sinal };
   rede.viaApoio = esconderIp() && turn.length > 0;
   const rtcConfig = { iceServers: [...ICE, ...turn], iceTransportPolicy: rede.viaApoio ? 'relay' : 'all' };
   sala = joinRoom(sinal, { appId: APP_ID, password: chave, rtcConfig, rtcPolyfill: Conexao }, canalId);
@@ -490,7 +522,7 @@ export async function entrar({ canalId, chave, userId, turn = [], sinal }) {
     sala.addTrack(micTrack, voz.micStream, { target: id, metadata: { tipo: 'mic' } });
     acoes.estado.send(estadoAtual(), { target: id });
     avisar('chegou', id); // o Rádio manda a fila atual pra quem chegou
-    tocarSom('entrou');
+    if (Date.now() > silencioAte) tocarSom('entrou');
     avisar('participantes');
   };
 
@@ -498,6 +530,7 @@ export async function entrar({ canalId, chave, userId, turn = [], sinal }) {
     const p = voz.participantes.get(id);
     if (!p) return;
     if (p.audioEl) p.audioEl.srcObject = null;
+    soltarVoz(p);
     analisadores.delete(id);
     voz.espectadores.delete(id);
     preferenciasTela.delete(id);
@@ -518,15 +551,17 @@ export async function entrar({ canalId, chave, userId, turn = [], sinal }) {
       return;
     }
     if (track.kind !== 'audio') return;
+    // o elemento de áudio fica mudo: ele só mantém a voz chegando (o Chrome precisa disso);
+    // quem toca é o mixer, que deixa subir cada pessoa além de 100%
     if (!p.audioEl) {
       p.audioEl = new Audio();
       p.audioEl.autoplay = true;
+      p.audioEl.muted = true;
     }
     p.audioEl.srcObject = stream;
-    p.audioEl.volume = p.volume;
-    aplicarMudoDe(p);
-    if (saidaId && p.audioEl.setSinkId) p.audioEl.setSinkId(saidaId).catch(() => {});
     p.audioEl.play().catch(() => {});
+    ligarVozNoMixer(p, stream);
+    aplicarMudoDe(p);
     monitorarFala(id, stream);
   };
 
@@ -540,7 +575,6 @@ export async function entrar({ canalId, chave, userId, turn = [], sinal }) {
     p.aoVivo = Boolean(dados.aoVivo);
     if (novoUser) {
       p.volume = Number(ler('herald-vol-' + p.userId) ?? 1);
-      if (p.audioEl) p.audioEl.volume = p.volume;
       aplicarMudoDe(p);
     }
     if (!p.aoVivo) {
@@ -563,18 +597,19 @@ export async function entrar({ canalId, chave, userId, turn = [], sinal }) {
       enviarTelaPara(peerId);
     }
   };
-
-  tocarSom('entrou');
-  avisar('conexao');
 }
 
 export async function sair() {
   if (!sala) return;
   if (voz.telaStream) pararTela();
-  for (const p of voz.participantes.values()) if (p.audioEl) p.audioEl.srcObject = null;
+  for (const p of voz.participantes.values()) {
+    if (p.audioEl) p.audioEl.srcObject = null;
+    soltarVoz(p);
+  }
   const s = sala;
   sala = null;
   acoes = {};
+  chaveAtual = null;
   voz.participantes.clear();
   voz.espectadores.clear();
   preferenciasTela.clear();
@@ -623,7 +658,7 @@ export function definirVolume(userId, volume) {
   for (const p of voz.participantes.values()) {
     if (p.userId !== userId) continue;
     p.volume = volume;
-    if (p.audioEl) p.audioEl.volume = volume;
+    aplicarMudoDe(p);
   }
 }
 
@@ -637,7 +672,101 @@ export function definirMudoLocal(userId, mudo) {
   avisar('participantes');
 }
 function aplicarMudoDe(p) {
-  if (p.audioEl) p.audioEl.muted = voz.surdo || (p.userId && mudoLocal(p.userId));
+  const mudo = voz.surdo || (p.userId && mudoLocal(p.userId));
+  if (p.ganhoVoz) p.ganhoVoz.gain.setTargetAtTime(mudo ? 0 : p.volume, p.ganhoVoz.context.currentTime, 0.02);
+}
+
+// ---- Mixer das vozes ----
+// Cada voz passa por um ganho próprio (0 a 200%) e todas juntas por um limitador no fim:
+// dá pra subir quem fala baixo sem estourar, mesmo com todo mundo falando ao mesmo tempo.
+let mixer = null;
+function mixerVozes() {
+  if (mixer) return mixer;
+  const ctx = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 });
+  const mestre = new GainNode(ctx);
+  const limitador = new DynamicsCompressorNode(ctx, { threshold: -6, knee: 4, ratio: 20, attack: 0.002, release: 0.12 });
+  mestre.connect(limitador).connect(ctx.destination);
+  if (saidaId && saidaId !== 'default') ctx.setSinkId?.(saidaId).catch(() => {});
+  mixer = { ctx, mestre };
+  return mixer;
+}
+function ligarVozNoMixer(p, stream) {
+  const m = mixerVozes();
+  if (m.ctx.state === 'suspended') m.ctx.resume();
+  p.fonteVoz?.disconnect();
+  p.fonteVoz = m.ctx.createMediaStreamSource(stream);
+  if (!p.ganhoVoz) {
+    p.ganhoVoz = new GainNode(m.ctx, { gain: 0 });
+    p.ganhoVoz.connect(m.mestre);
+  }
+  p.fonteVoz.connect(p.ganhoVoz);
+}
+// ---- Som das transmissões (também passa pelo mixer: até 200% e mutar) ----
+const sonsTela = new Map(); // userId -> { faixa, fonte, ganho }
+
+function ganhoTela(userId) {
+  return ler('herald-mudo-tela-' + userId) === '1' ? 0 : volumeTelaDe(userId);
+}
+export function volumeTelaDe(userId) {
+  return Number(ler('herald-vol-tela-' + userId) ?? 1);
+}
+export function mudoTela(userId) {
+  return ler('herald-mudo-tela-' + userId) === '1';
+}
+// liga o som da transmissão de alguém no mixer (o <video> fica mudo, só mantendo o som chegando)
+export function tocarSomTela(userId, stream) {
+  const faixa = stream?.getAudioTracks()[0];
+  const atual = sonsTela.get(userId);
+  if (atual?.faixa === faixa) return;
+  pararSomTela(userId);
+  if (!faixa) return;
+  const m = mixerVozes();
+  if (m.ctx.state === 'suspended') m.ctx.resume();
+  const fonte = m.ctx.createMediaStreamSource(new MediaStream([faixa]));
+  const ganho = new GainNode(m.ctx, { gain: ganhoTela(userId) });
+  fonte.connect(ganho).connect(m.mestre);
+  sonsTela.set(userId, { faixa, fonte, ganho });
+}
+export function pararSomTela(userId) {
+  const s = sonsTela.get(userId);
+  if (!s) return;
+  s.fonte.disconnect();
+  s.ganho.disconnect();
+  sonsTela.delete(userId);
+}
+// para o som de transmissões que não estão mais na tela
+export function manterSonsTela(userIds) {
+  for (const id of [...sonsTela.keys()]) if (!userIds.has(id)) pararSomTela(id);
+}
+function aplicarSomTela(userId) {
+  const s = sonsTela.get(userId);
+  if (s) s.ganho.gain.setTargetAtTime(ganhoTela(userId), s.ganho.context.currentTime, 0.02);
+}
+export function definirVolumeTela(userId, volume) {
+  guardar('herald-vol-tela-' + userId, volume);
+  aplicarSomTela(userId);
+}
+export function definirMudoTela(userId, mudo) {
+  guardar('herald-mudo-tela-' + userId, mudo ? '1' : '0');
+  aplicarSomTela(userId);
+}
+
+// A minha transmissão: liga/desliga o som do PC que estou mandando (sem parar de transmitir)
+export function temSomNaMinhaTela() {
+  return Boolean(voz.telaStream?.getAudioTracks().length);
+}
+export function somDaMinhaTelaLigado() {
+  return Boolean(voz.telaStream?.getAudioTracks()[0]?.enabled);
+}
+export function ligarSomDaMinhaTela(ligado) {
+  for (const t of voz.telaStream?.getAudioTracks() || []) t.enabled = ligado;
+}
+
+function soltarVoz(p) {
+  p.fonteVoz?.disconnect();
+  p.ganhoVoz?.disconnect();
+  p.fonteVoz = null;
+  p.ganhoVoz = null;
 }
 
 export function volumeDe(userId) {
@@ -647,7 +776,7 @@ export function volumeDe(userId) {
 export function definirSaida(deviceId) {
   saidaId = deviceId;
   guardar('herald-saida', deviceId);
-  for (const p of voz.participantes.values()) p.audioEl?.setSinkId?.(deviceId).catch(() => {});
+  mixer?.ctx.setSinkId?.(deviceId === 'default' ? '' : deviceId).catch(() => {});
   testeAudio?.setSinkId?.(deviceId).catch(() => {});
   // o som das telas também sai no dispositivo escolhido
   for (const v of document.querySelectorAll('video[data-remoto]')) v.setSinkId?.(deviceId).catch(() => {});
@@ -659,9 +788,45 @@ export function saidaAtual() {
 
 // ================= Tela =================
 
-export async function iniciarTela(fonteId, qualidadeId, comAudio) {
+// Som só da janela: o processo principal captura o programa dono da janela e manda os
+// pedaços de som; aqui eles viram uma trilha de áudio normal (que vai junto com a tela)
+let somJanela = null; // { ctx, trilha }
+let ouvindoJanela = false;
+async function trilhaDaJanela(fonteId) {
+  const r = await window.herald.audioJanela?.iniciar(fonteId);
+  if (!r?.ok) return null;
+  const ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
+  await ctx.audioWorklet.addModule('dist/audio/janela-som.js');
+  const no = new AudioWorkletNode(ctx, 'janela-som', { numberOfInputs: 0, outputChannelCount: [2] });
+  const destino = ctx.createMediaStreamDestination();
+  destino.channelCount = 2;
+  no.connect(destino);
+  somJanela = { ctx, no, trilha: destino.stream.getAudioTracks()[0] };
+  if (!ouvindoJanela) {
+    ouvindoJanela = true;
+    window.herald.audioJanela.aoDados((pedaco) => somJanela?.no.port.postMessage(pedaco));
+  }
+  return somJanela.trilha;
+}
+function pararSomJanela() {
+  if (!somJanela) return;
+  window.herald.audioJanela?.parar();
+  somJanela.trilha.stop();
+  somJanela.ctx.close();
+  somJanela = null;
+}
+
+// comAudio: manda som junto. Numa janela (window:…), soDaJanela = só o som daquela janela.
+// Se a captura da janela falhar (Windows antigo etc.), cai pro som do PC.
+export async function iniciarTela(fonteId, qualidadeId, comAudio, soDaJanela = false) {
   const q = QUALIDADES[qualidadeId] || QUALIDADES['1080p60'];
-  await window.herald.escolherFonte(fonteId, comAudio);
+  let trilhaJanela = null;
+  if (comAudio && soDaJanela && String(fonteId).startsWith('window:')) {
+    trilhaJanela = await trilhaDaJanela(fonteId).catch(() => null);
+    if (!trilhaJanela) avisar('aviso-tela', 'janela-sem-som');
+  }
+  const usarSomDoPc = comAudio && !trilhaJanela;
+  await window.herald.escolherFonte(fonteId, usarSomDoPc);
   let stream;
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
@@ -672,7 +837,7 @@ export async function iniciarTela(fonteId, qualidadeId, comAudio) {
       },
       // som do PC "cru" (os filtros de voz estragam música/jogo) e sem o som
       // do próprio Herald, pra voz da galera não voltar pra eles
-      audio: comAudio && {
+      audio: usarSomDoPc && {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
@@ -682,8 +847,10 @@ export async function iniciarTela(fonteId, qualidadeId, comAudio) {
     });
   } catch (err) {
     console.error(err);
+    pararSomJanela();
     return false;
   }
+  if (trilhaJanela) stream.addTrack(trilhaJanela);
   voz.telaStream = stream;
   telaQualidade = q;
   const video = stream.getVideoTracks()[0];
@@ -717,6 +884,7 @@ export function pararTela() {
   if (!voz.telaStream) return;
   for (const id of [...voz.espectadores]) pararTelaPara(id);
   voz.telaStream.getTracks().forEach((t) => t.stop());
+  pararSomJanela();
   voz.telaStream = null;
   telaQualidade = null;
   voz.aoVivo = false;

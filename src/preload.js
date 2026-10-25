@@ -4,6 +4,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('herald', {
   fontes: () => ipcRenderer.invoke('fontes'),
   escolherFonte: (id, audio) => ipcRenderer.invoke('escolher-fonte', id, audio),
+  // som só da janela compartilhada (o processo principal captura e manda os pedaços de PCM)
+  audioJanela: {
+    iniciar: (fonteId) => ipcRenderer.invoke('audio-janela-iniciar', fonteId),
+    parar: () => ipcRenderer.invoke('audio-janela-parar'),
+    aoDados: (fn) => ipcRenderer.on('audio-janela', (_e, pedaco) => fn(pedaco)),
+  },
   radioBuscar: (texto) => ipcRenderer.invoke('radio-buscar', texto),
   metricas: () => ipcRenderer.invoke('metricas'),
   labSalvar: (arquivos) => ipcRenderer.invoke('lab-salvar', arquivos),

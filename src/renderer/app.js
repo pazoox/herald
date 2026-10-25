@@ -122,6 +122,55 @@ function abrirNovidades(antes, agora) {
   document.activeElement?.blur();
 }
 
+// ================= Dicas (tooltips) =================
+// Um balão só, que flutua por cima de tudo e se ajusta pra caber na janela. O lado depende
+// de onde está o botão: barra dos Nests → direita, trilha da direita → esquerda, barra de
+// baixo → em cima, resto → embaixo (ou em cima, se não couber).
+const dica = document.createElement('div');
+dica.className = 'dica-flutuante';
+let alvoDica = null;
+let esperaDica = null;
+function esconderDica() {
+  clearTimeout(esperaDica);
+  alvoDica = null;
+  dica.classList.remove('visivel');
+}
+function mostrarDica(el) {
+  if (!el.isConnected || !el.dataset.tip) return;
+  // dentro de uma janela de diálogo, o balão precisa estar nela (senão fica por trás)
+  const pai = el.closest('dialog[open]') || document.body;
+  if (dica.parentNode !== pai) pai.appendChild(dica);
+  dica.textContent = el.dataset.tip;
+  const r = el.getBoundingClientRect();
+  const d = dica.getBoundingClientRect();
+  const M = 8;
+  const lado = el.closest('.trilho') ? 'direita' : el.closest('.lateral-trilho') ? 'esquerda' : el.closest('.doca') ? 'cima' : 'baixo';
+  let x, y;
+  if (lado === 'direita') { x = r.right + 10; y = r.top + r.height / 2 - d.height / 2; }
+  else if (lado === 'esquerda') { x = r.left - d.width - 10; y = r.top + r.height / 2 - d.height / 2; }
+  else {
+    x = r.left + r.width / 2 - d.width / 2;
+    y = lado === 'cima' ? r.top - d.height - 10 : r.bottom + 8;
+    if (y + d.height > innerHeight - M) y = r.top - d.height - 8; // não cabe embaixo: vai pra cima
+    if (y < M) y = r.bottom + 8;
+  }
+  x = Math.max(M, Math.min(innerWidth - d.width - M, x));
+  y = Math.max(M, Math.min(innerHeight - d.height - M, y));
+  dica.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  dica.classList.add('visivel');
+}
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest?.('[data-tip]');
+  if (el === alvoDica) return;
+  esconderDica();
+  if (!el || !el.dataset.tip) return;
+  alvoDica = el;
+  esperaDica = setTimeout(() => mostrarDica(el), 300);
+});
+document.addEventListener('mousedown', esconderDica, true);
+document.addEventListener('scroll', esconderDica, true);
+window.addEventListener('blur', esconderDica);
+
 function aviso(texto) {
   const el = document.createElement('div');
   el.className = 'aviso';
@@ -156,6 +205,8 @@ let modoCadastro = false;
 function atualizarModoEntrada() {
   $('#campo-nome').hidden = !modoCadastro;
   $('#ent-nome').required = modoCadastro;
+  $('#campo-codigo').hidden = !modoCadastro;
+  $('#ent-codigo').required = modoCadastro;
   $('#ent-senha').autocomplete = modoCadastro ? 'new-password' : 'current-password';
   $('#btn-entrar').dataset.i18nOriginal = modoCadastro ? 'Create account' : 'Sign in';
   $('#troca-texto').dataset.i18nOriginal = modoCadastro ? 'Already have an account?' : 'No account yet?';
@@ -176,6 +227,12 @@ function traduzirErro(err) {
   if (/at least 6|password should/i.test(m)) return t('Password must have at least 6 characters.');
   if (/failed to fetch|network/i.test(m)) return t('Could not connect. Check your internet.');
   if (/invalid invite/i.test(m)) return t('This invite is not valid.');
+  if (/profiles_nome_unico|name-taken/i.test(m)) return t('This name is already taken. Try another one.');
+  if (/code-invalid/i.test(m)) return t('Wrong access code. Codes change every day.');
+  if (/email-taken/i.test(m)) return t('This email is already registered.');
+  if (/email-invalid/i.test(m)) return t('This email does not look right.');
+  if (/password-short/i.test(m)) return t('Password must have at least 6 characters.');
+  if (/sign-ups are closed/i.test(m)) return t('Update Herald to create an account.');
   if (/not allowed|only the owner|row-level security|permission denied/i.test(m)) return t("You don't have permission to do that.");
   return t('Something went wrong: {msg}', { msg: m });
 }
@@ -187,12 +244,26 @@ $('#form-entrada').addEventListener('submit', async (e) => {
   const senha = $('#ent-senha').value;
   $('#btn-entrar').disabled = true;
   $('#erro-entrada').textContent = '';
-  const { error } = modoCadastro
-    ? await sb.auth.signUp({ email, password: senha, options: { data: { display_name: $('#ent-nome').value.trim() } } })
-    : await sb.auth.signInWithPassword({ email, password: senha });
+  let error = null;
+  if (modoCadastro) error = await criarConta(email, senha);
+  if (!error) ({ error } = await sb.auth.signInWithPassword({ email, password: senha }));
   $('#btn-entrar').disabled = false;
   if (error) $('#erro-entrada').textContent = traduzirErro(error);
 });
+
+// Cadastro fechado: quem cria a conta é a função do servidor, que confere o código do dia
+async function criarConta(email, senha) {
+  const corpo = { email, senha, nome: $('#ent-nome').value.trim(), codigo: $('#ent-codigo').value.trim() };
+  try {
+    const { error } = await sb.functions.invoke('criar-conta', { body: corpo });
+    if (!error) return null;
+    // a resposta de erro traz o motivo (ex.: { erro: 'code-invalid' })
+    const motivo = await error.context?.json?.().catch(() => null);
+    return new Error(motivo?.erro || error.message);
+  } catch (err) {
+    return err;
+  }
+}
 
 // ================= Carregar dados =================
 
@@ -305,6 +376,11 @@ function recarregarEstrutura() {
   clearTimeout(recarregando);
   recarregando = setTimeout(async () => {
     await carregarEstrutura();
+    // a senha da call muda quando alguém sai ou é expulso do Nest: troca de sala sozinho
+    if (voz.conectado) {
+      const canal = [...est.canais.values()].flat().find((c) => c.id === voz.canalId);
+      if (canal?.voice_key) chamada.trocarChave(canal.voice_key);
+    }
     if (est.nestAtual && !est.nests.has(est.nestAtual)) abrirNest([...est.nests.keys()][0] || null);
     else render();
   }, 250);
@@ -501,7 +577,7 @@ function renderMensagens(rolarFim = false) {
   for (const m of lista) {
     const agrupa = anterior && anterior.author_id === m.author_id && new Date(m.created_at) - new Date(anterior.created_at) < 5 * 60000;
     const meu = m.author_id === est.eu.id || meuNivel() >= 1; // Moderator pra cima apaga a dos outros
-    const apagar = meu ? `<button class="msg-apagar" data-apagar="${m.id}" title="${esc(t('Delete message'))}">${icone('lixo')}</button>` : '';
+    const apagar = meu ? `<button class="msg-apagar" data-apagar="${m.id}" data-tip="${esc(t('Delete message'))}">${icone('lixo')}</button>` : '';
     if (agrupa) {
       html += `<li class="msg continua"><span class="msg-hora-lado">${horaCurta(m.created_at)}</span><div class="msg-texto">${linkificar(m.content)}</div>${apagar}</li>`;
     } else {
@@ -573,7 +649,7 @@ function renderCanais() {
   const presenca = presencaDe(nest.id);
   const secao = (tipo, titulo) => {
     const itens = canais.filter((c) => c.kind === tipo);
-    const mais = dono ? `<button class="botao-icone pequeno" data-novo-canal="${tipo}" title="${esc(t('New channel'))}">${icone('mais')}</button>` : '';
+    const mais = dono ? `<button class="botao-icone pequeno" data-novo-canal="${tipo}" data-tip="${esc(t('New channel'))}">${icone('mais')}</button>` : '';
     let html = `<div class="secao-canais"><span>${esc(t(titulo))}</span>${mais}</div>`;
     for (const c of itens) {
       const ativo = tipo === 'text' ? est.vista === 'texto' && c.id === canalTextoAtual() : est.vista === 'voz' && c.id === est.vozVista;
@@ -610,23 +686,36 @@ $('#canais-lista').addEventListener('click', async (e) => {
 function renderUsuario() {
   $('#eu-avatar').outerHTML = avatarHtml(est.eu.id).replace('class="avatar ', 'id="eu-avatar" class="avatar ');
   $('#eu-nome').textContent = est.eu.display_name;
-  $('#eu-sub').textContent = voz.conectado ? t('Voice connected') : t('Online');
+  // linha embaixo do nome: na call mostra o estado do microfone; fora dela, Online
+  const sub = $('#eu-sub');
+  sub.textContent = !voz.conectado ? t('Online') : voz.surdo ? t('Deafened') : voz.mudo ? t('Muted') : t('Mic on');
+  sub.dataset.estado = !voz.conectado ? 'online' : voz.surdo || voz.mudo ? 'mudo' : 'ativo';
   const mudo = $('#btn-mudo');
   mudo.innerHTML = icone(voz.mudo ? 'mic-off' : 'mic');
   mudo.classList.toggle('desligado', voz.mudo);
-  mudo.title = t(voz.mudo ? 'Unmute' : 'Mute');
+  mudo.dataset.tip = t(voz.mudo ? 'Unmute' : 'Mute');
   const surdo = $('#btn-surdo');
   surdo.innerHTML = icone(voz.surdo ? 'fone-off' : 'fone');
   surdo.classList.toggle('desligado', voz.surdo);
-  surdo.title = t(voz.surdo ? 'Undeafen' : 'Deafen');
+  surdo.dataset.tip = t(voz.surdo ? 'Undeafen' : 'Deafen');
 
-  // Painel "voz conectada"
+  // Faixa da call (só na call): canal, Nest e ping — clicar leva pra call
   const canal = voz.canalId && [...est.canais.values()].flat().find((c) => c.id === voz.canalId);
-  $('#painel-voz').hidden = !canal;
+  $('#ce-call').hidden = !canal;
+  $('#cartao-eu').classList.toggle('na-call', Boolean(canal));
   if (canal) {
-    $('#pv-onde').textContent = `${canal.name} / ${est.nests.get(canal.nest_id)?.name || ''}`;
-    $('#btn-tela-pv').classList.toggle('ligado', voz.aoVivo);
+    $('#ce-canal').textContent = canal.name;
+    $('#ce-nest').textContent = est.nests.get(canal.nest_id)?.name || '';
+    $('#ce-call').classList.toggle('ao-vivo', voz.aoVivo);
+    atualizarPingEu();
   }
+}
+
+function atualizarPingEu() {
+  const ping = voz.rede?.ping;
+  const el = $('#ce-ping');
+  el.textContent = ping == null ? (voz.aoVivo ? t('LIVE') : '') : `${Math.round(ping)} ms`;
+  el.dataset.nivel = ping == null ? '' : ping < 80 ? 'bom' : ping < 150 ? 'medio' : 'ruim';
 }
 
 function renderMembros() {
@@ -654,12 +743,21 @@ function renderMembros() {
 const painelSistema = criarPainelSistema({ el: $('#sistema'), voz, chamada, nomeDe, demo: new URLSearchParams(location.search).has('demo') });
 let abaLateral = ler('herald-lateral') || ''; // '' = recolhido
 
+let abaAnterior = null;
 function aplicarLateral() {
+  // o Rádio encaixado é um elemento à parte (fixo na tela): anima junto com a gaveta.
+  // Gaveta abrindo = desliza; troca de aba com ela já aberta = aparece.
+  if (abaLateral === 'radio' && abaAnterior !== 'radio') {
+    const rd = $('#radio');
+    rd.classList.remove('desliza', 'aparece');
+    void rd.offsetWidth;
+    rd.classList.add(abaAnterior ? 'aparece' : 'desliza');
+  }
+  abaAnterior = abaLateral;
   $('#app').classList.toggle('lateral-aberta', Boolean(abaLateral));
   document.body.classList.toggle('lateral-aberta', Boolean(abaLateral)); // o Rádio flutuante sai da frente
-  $$('[data-aba-lateral]').forEach((b) => b.classList.toggle('ligado', b.dataset.abaLateral === abaLateral));
+  $$('[data-titulo-lateral]').forEach((s) => { s.hidden = s.dataset.tituloLateral !== abaLateral; });
   $('#membros').hidden = abaLateral !== 'membros';
-  $('.lateral-titulo-membros').hidden = abaLateral !== 'membros';
   $('#sistema').hidden = abaLateral !== 'sistema';
   $('#painel-radio').hidden = abaLateral !== 'radio';
   if (abaLateral === 'sistema') painelSistema.redesenhar();
@@ -671,13 +769,22 @@ function aplicarLateral() {
   guardar('herald-lateral', abaLateral);
 }
 $('#lateral').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-lateral], [data-aba-lateral]');
+  const b = e.target.closest('[data-lateral]');
   if (!b) return;
-  const acao = b.dataset.lateral || b.dataset.abaLateral;
+  const acao = b.dataset.lateral;
   if (acao === 'fechar') abaLateral = '';
   else if (acao === 'abrir') abaLateral = ler('herald-lateral-ultima') || 'membros';
   else abaLateral = acao;
   if (abaLateral) guardar('herald-lateral-ultima', abaLateral);
+  aplicarLateral();
+});
+// clicar em qualquer lugar fora da gaveta fecha ela
+// (menus, diálogos e o Rádio encaixado contam como "dentro")
+document.addEventListener('mousedown', (e) => {
+  if (!abaLateral || e.button !== 0) return;
+  if (e.target.closest('#lateral, #radio, .menu-pessoa, .menu, dialog, .barra-titulo')) return;
+  if (document.querySelector('dialog[open]')) return;
+  abaLateral = '';
   aplicarLateral();
 });
 // Anéis da trilha (estilo Rexie): Membros = online/total, Rádio = progresso da música,
@@ -691,6 +798,38 @@ function anel(el, fracao, cor, rotulo) {
   el.querySelector('.anel-rotulo').textContent = rotulo;
 }
 const tempoCurto = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+// Botão direito no anel do Rádio: controles rápidos sem abrir nada
+$('#anel-radio').addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fecharMenuPessoa();
+  const r = radio.info();
+  menuPessoa = document.createElement('div');
+  menuPessoa.className = 'menu-pessoa';
+  menuPessoa.innerHTML = `<div class="mp-topo"><span class="mp-canal">${icone('radio')}</span><div><b>${esc(r.titulo || t('Radio'))}</b>${r.restante != null ? `<span>-${tempoCurto(r.restante)}</span>` : ''}</div></div>
+    ${r.ativo ? `<button data-mr="pausa">${icone(r.pausado ? 'tocar' : 'pausar')}${esc(t(r.pausado ? 'Play' : 'Pause'))}</button>
+    <button data-mr="pular">${icone('pular')}${esc(t('Skip'))}</button>` : ''}
+    <button data-mr="popup">${icone(r.escondido ? 'janela' : 'esconder')}${esc(t(r.escondido ? 'Show pop-up' : 'Hide pop-up'))}</button>
+    <button data-mr="painel">${icone('fila')}${esc(t('Open in panel'))}</button>`;
+  document.body.appendChild(menuPessoa);
+  const caixa = menuPessoa.getBoundingClientRect();
+  menuPessoa.style.left = `${Math.min(e.clientX, innerWidth - caixa.width - 8)}px`;
+  menuPessoa.style.top = `${Math.min(e.clientY, innerHeight - caixa.height - 8)}px`;
+  menuPessoa.addEventListener('click', (ev) => {
+    const acao = ev.target.closest('[data-mr]')?.dataset.mr;
+    if (!acao) return;
+    fecharMenuPessoa();
+    if (acao === 'pausa') radio.alternarPausa();
+    if (acao === 'pular') radio.pular();
+    if (acao === 'popup') r.escondido ? radio.mostrar() : radio.esconder();
+    if (acao === 'painel') {
+      abaLateral = 'radio';
+      guardar('herald-lateral-ultima', 'radio');
+      aplicarLateral();
+    }
+  });
+});
 function atualizarTrilho(sis) {
   const m = est.contagemMembros || { online: 0, total: 0 };
   anel($('#anel-membros'), m.total ? m.online / m.total : 0, 'lima', m.total ? `${m.online}/${m.total}` : '–');
@@ -704,16 +843,32 @@ function atualizarTrilho(sis) {
       void anelRadio.offsetWidth; // reinicia a animação
       anelRadio.classList.add('entrando');
     }
-    $('[data-aba-lateral="radio"]').hidden = !r.ligado;
+    // Rádio desligou com a gaveta aberta nele: fecha a gaveta
+    if (!r.ligado && abaLateral === 'radio') { abaLateral = ''; aplicarLateral(); }
   }
   anelRadio.classList.toggle('tocando', r.tocando);
   anel($('#anel-radio'), r.progresso, r.ativo ? 'roxo' : '', r.ativo && r.restante != null ? `-${tempoCurto(r.restante)}` : '–');
-  $('#anel-radio').dataset.tip = r.titulo || t('Radio');
   if (sis?.fps != null) anel($('#anel-sistema'), sis.fps / sis.alvoFps, sis.cor, `${sis.fps}fps`);
   else anel($('#anel-sistema'), (sis?.cpu ?? 0) / 100, sis?.cor, sis?.cpu == null ? '–' : `${Math.round(sis.cpu)}%`);
+
+  // descrição de cada anel ao passar o mouse
+  $('#anel-membros').dataset.tip = m.total
+    ? t('Members · {online} of {total} online', { online: m.online, total: m.total })
+    : t('Members');
+  let dicaRadio = t('Radio');
+  if (r.titulo) dicaRadio += ` · ${r.titulo}`;
+  if (r.pausado) dicaRadio += ` · ${t('Paused')}`;
+  else if (r.ativo && r.restante != null) dicaRadio += ` · ${t('{time} left', { time: tempoCurto(r.restante) })}`;
+  $('#anel-radio').dataset.tip = dicaRadio;
+  $('#anel-sistema').dataset.tip = sis?.fps != null
+    ? t('Your stream · {fps} of {alvo} fps', { fps: sis.fps, alvo: sis.alvoFps })
+    : sis?.cpu != null ? t('System · PC CPU at {cpu}%', { cpu: Math.round(sis.cpu) }) : t('System');
+  // se o balão já está aberto em cima de um anel, atualiza o texto ao vivo
+  if (alvoDica?.classList.contains('anel') && dica.classList.contains('visivel')) dica.textContent = alvoDica.dataset.tip;
 }
 setInterval(async () => {
   atualizarTrilho(await painelSistema.atualizar(abaLateral === 'sistema'));
+  if (voz.conectado) atualizarPingEu();
 }, 1000);
 queueMicrotask(aplicarLateral); // depois que o Rádio (mais embaixo) já existir
 
@@ -953,6 +1108,7 @@ chamada.aoMudar((tipo, dados) => {
   if (tipo === 'stats') return atualizarStats(dados);
   if (tipo === 'roleta') return roleta.receber(dados);
   if (tipo === 'calibrado') return aviso(t('Your mic is now calibrated ✓ Hear the difference in Settings → Audio'));
+  if (tipo === 'aviso-tela' && dados === 'janela-sem-som') return aviso(t("Couldn't capture only this window's sound — sharing your PC audio instead"));
   if (tipo === 'calibracao') return $('#dlg-config').open && renderCalibracao();
   if (tipo === 'radio') return radio.receber(dados);
   if (tipo === 'chegou') return radio.chegou(dados);
@@ -973,15 +1129,13 @@ $('#btn-mudo').onclick = () => chamada.alternarMudo();
 $('#btn-surdo').onclick = () => chamada.alternarSurdo();
 $('#doca-mudo').onclick = () => chamada.alternarMudo();
 $('#doca-surdo').onclick = () => chamada.alternarSurdo();
-$('#btn-desconectar').onclick = sairDaVoz;
 $('#doca-sair').onclick = sairDaVoz;
 $('#doca-entrar').onclick = () => {
   const canal = (est.canais.get(est.nestAtual) || []).find((c) => c.id === est.vozVista);
   if (canal) entrarNaVoz(canal);
 };
-$('#btn-tela-pv').onclick = () => abrirSeletorTela();
 $('#doca-tela').onclick = () => abrirSeletorTela();
-$('#pv-onde').onclick = () => {
+$('#ce-call').onclick = () => {
   const canal = [...est.canais.values()].flat().find((c) => c.id === voz.canalId);
   if (!canal) return;
   if (est.nestAtual !== canal.nest_id) abrirNest(canal.nest_id);
@@ -1039,6 +1193,7 @@ function renderPalco() {
   $('#palco').classList.toggle('com-video', videos.length > 0);
   $('#palco-pessoas').dataset.vazio = pessoas.length ? '' : t('Nobody here yet. Jump in!');
   sincronizar($('#palco-videos'), videos, atualizarVideo);
+  chamada.manterSonsTela(new Set(videos.filter((v) => !v.local && v.stream).map((v) => v.userId)));
   limparJanelas(new Set(videos.map((v) => v.chave)));
   sincronizar($('#palco-pessoas'), pessoas, atualizarCartao);
   aplicarFala();
@@ -1100,12 +1255,8 @@ function atualizarVideo(el, d) {
         </div>
       </div>
       <div class="em-janela"><span>${esc(t('Watching in another window'))}</span><button data-trazer>${esc(t('Bring it back'))}</button></div>`;
-    if (!d.local) {
-      const v = el.querySelector('video');
-      v.volume = volumeTela(d.userId);
-      // o som da tela sai no mesmo fone/caixa escolhido pras vozes
-      if (chamada.saidaAtual()) v.setSinkId?.(chamada.saidaAtual()).catch(() => {});
-    }
+    // o <video> fica mudo: o som da transmissão toca pelo mixer (volume até 200%, mutar, limitador)
+    el.querySelector('video').muted = true;
   }
   el.dataset.peer = d.peerId || 'eu';
   el.dataset.usuarioTela = d.userId;
@@ -1113,6 +1264,7 @@ function atualizarVideo(el, d) {
   const video = el.querySelector('video');
   if (video.srcObject !== (d.stream || null)) video.srcObject = d.stream || null;
   // o deafen só silencia as vozes; o som da transmissão continua (dá pra baixar no botão direito)
+  if (!d.local) chamada.tocarSomTela(d.userId, d.stream);
   el.classList.toggle('popout', Boolean(janelasTela.get(d.chave) && !janelasTela.get(d.chave).closed));
   el.classList.toggle('carregando', !d.stream);
   el.querySelector('.carregando-texto').hidden = Boolean(d.stream);
@@ -1209,10 +1361,6 @@ document.addEventListener('click', (e) => {
 
 const janelasTela = new Map(); // chave do cartão -> Window
 
-function volumeTela(userId) {
-  return Number(ler('herald-vol-tela-' + userId) ?? 1);
-}
-
 function abrirEmJanela(cartao) {
   const chave = cartao.dataset.chave;
   const aberta = janelasTela.get(chave);
@@ -1271,14 +1419,18 @@ function abrirMenuTela(cartao, x, y) {
   const video = cartao.querySelector('video');
   const emJanela = cartao.classList.contains('popout');
   const statsFixas = ler('herald-stats-fixas') === '1';
-  const vol = Math.round(video.volume * 100);
+  const vol = Math.round(chamada.volumeTelaDe(userId) * 100);
+  const mudo = chamada.mudoTela(userId);
 
   let html = `<div class="mp-topo">${avatarHtml(userId)}<div><b>${esc(local ? t('Your screen') : t("{name}'s stream", { name: nomeDe(userId) }))}</b></div></div>`;
   if (!local) {
-    html += `<div class="mp-bloco">
-      <div class="mp-rotulo"><span>${esc(t('Stream volume'))}</span><b id="mt-vol-valor">${vol}%</b></div>
-      <input type="range" id="mt-vol" min="0" max="100" step="1" value="${vol}">
-    </div>`;
+    html += `<div class="mp-bloco ${mudo ? 'mudo' : ''}">
+      <div class="mp-rotulo"><span>${esc(t('Stream volume'))}</span><b id="mt-vol-valor" class="${vol > 100 ? 'acima-100' : ''}">${vol}%</b></div>
+      <input type="range" id="mt-vol" min="0" max="200" step="1" value="${vol}" class="${vol > 100 ? 'acima-100' : ''}">
+    </div>
+    <label class="alternador mp-alternador"><input type="checkbox" id="mt-mudo" ${mudo ? 'checked' : ''}><span class="trilha"></span><span>${esc(t('Mute stream'))} <small>${esc(t('only for you'))}</small></span></label>`;
+  } else if (chamada.temSomNaMinhaTela()) {
+    html += `<label class="alternador mp-alternador"><input type="checkbox" id="mt-som-pc" ${chamada.somDaMinhaTelaLigado() ? 'checked' : ''}><span class="trilha"></span><span>${esc(t('Share PC audio'))} <small>${esc(t('turn off to send only the image'))}</small></span></label>`;
   }
   html += `<button data-mt="janela">${icone('janela')}${esc(t(emJanela ? 'Bring it back' : 'Pop out'))}</button>
     <button data-mt="cheia">${icone('maximizar')}${esc(t('Fullscreen'))}</button>
@@ -1300,11 +1452,19 @@ function abrirMenuTela(cartao, x, y) {
 
   menuPessoa.addEventListener('input', (e) => {
     if (e.target.id !== 'mt-vol') return;
-    video.volume = Number(e.target.value) / 100;
-    guardar('herald-vol-tela-' + userId, video.volume);
-    $('#mt-vol-valor').textContent = `${e.target.value}%`;
+    if (Math.abs(Number(e.target.value) - 100) <= 4) e.target.value = 100; // gruda no 100%
+    const v = Number(e.target.value);
+    chamada.definirVolumeTela(userId, v / 100);
+    $('#mt-vol-valor').textContent = `${v}%`;
+    $('#mt-vol-valor').classList.toggle('acima-100', v > 100);
+    e.target.classList.toggle('acima-100', v > 100);
   });
   menuPessoa.addEventListener('change', (e) => {
+    if (e.target.id === 'mt-mudo') {
+      chamada.definirMudoTela(userId, e.target.checked);
+      e.target.closest('.menu-pessoa').querySelector('.mp-bloco')?.classList.toggle('mudo', e.target.checked);
+    }
+    if (e.target.id === 'mt-som-pc') chamada.ligarSomDaMinhaTela(e.target.checked);
     if (e.target.id === 'mt-stats') {
       guardar('herald-stats-fixas', e.target.checked ? '1' : '0');
       $$('.cartao-video').forEach((c) => c.classList.toggle('stats-fixas', e.target.checked));
@@ -1350,8 +1510,8 @@ function abrirMenuPessoa(userId, x, y) {
   let html = `<div class="mp-topo">${avatarHtml(userId)}<div><b>${esc(nomeDe(userId))}</b>${ehEu ? `<span>${esc(t('you'))}</span>` : ''}</div></div>`;
   if (!ehEu) {
     html += `<div class="mp-bloco">
-      <div class="mp-rotulo"><span>${esc(t('User volume'))}</span><b id="mp-vol-valor">${volume}%</b></div>
-      <input type="range" id="mp-vol" min="0" max="100" step="1" value="${volume}">
+      <div class="mp-rotulo"><span>${esc(t('User volume'))}</span><b id="mp-vol-valor" class="${volume > 100 ? 'acima-100' : ''}">${volume}%</b></div>
+      <input type="range" id="mp-vol" min="0" max="200" step="1" value="${volume}" class="${volume > 100 ? 'acima-100' : ''}">
     </div>
     <label class="alternador mp-alternador">
       <input type="checkbox" id="mp-mudo" ${chamada.mudoLocal(userId) ? 'checked' : ''}>
@@ -1387,8 +1547,13 @@ function abrirMenuPessoa(userId, x, y) {
 
   menuPessoa.addEventListener('input', (e) => {
     if (e.target.id !== 'mp-vol') return;
-    chamada.definirVolume(userId, Number(e.target.value) / 100);
-    $('#mp-vol-valor').textContent = `${e.target.value}%`;
+    // gruda no 100% (o volume original) pra ficar fácil de voltar
+    if (Math.abs(Number(e.target.value) - 100) <= 4) e.target.value = 100;
+    const v = Number(e.target.value);
+    chamada.definirVolume(userId, v / 100);
+    $('#mp-vol-valor').textContent = `${v}%`;
+    $('#mp-vol-valor').classList.toggle('acima-100', v > 100);
+    e.target.classList.toggle('acima-100', v > 100);
   });
   menuPessoa.addEventListener('change', (e) => {
     if (e.target.id !== 'mp-mudo') return;
@@ -1535,29 +1700,6 @@ $('#btn-salvar-nest').onclick = async () => {
   render();
 };
 
-// Ícone do Nest: quadrado de 256px, na pasta nest-<id> do bucket de fotos
-$('#nest-icone-arquivo').onchange = async (e) => {
-  const arquivo = e.target.files[0];
-  e.target.value = '';
-  if (!arquivo) return;
-  if (arquivo.size > 8 * 1024 * 1024) return aviso(t('Image must be under 2 MB.'));
-  const img = await createImageBitmap(arquivo);
-  const lado = Math.min(img.width, img.height);
-  const canvas = new OffscreenCanvas(256, 256);
-  canvas.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, 256, 256);
-  const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.9 });
-  const caminho = `nest-${nestEditando.id}/icone-${Date.now()}.webp`;
-  const { error } = await sb.storage.from('avatars').upload(caminho, blob, { contentType: 'image/webp', upsert: true });
-  if (error) return aviso(traduzirErro(error));
-  const url = sb.storage.from('avatars').getPublicUrl(caminho).data.publicUrl;
-  const { error: erro2 } = await sb.from('nests').update({ icon_url: url }).eq('id', nestEditando.id);
-  if (erro2) return aviso(traduzirErro(erro2));
-  nestEditando.icon_url = url;
-  abrirEditarNest(nestEditando);
-  aviso(t('Saved!'));
-  render();
-};
-
 $('#btn-copiar-convite-nest').onclick = async () => {
   await navigator.clipboard.writeText($('#nest-convite-editar').value);
   aviso(t('Copied!'));
@@ -1676,6 +1818,10 @@ async function abrirSeletorTela() {
 
 function renderFontes() {
   $$('#abas-fonte button').forEach((b) => b.classList.toggle('ligado', b.dataset.aba === abaFonte));
+  // numa janela, o som vai ser só o dela (não o do PC inteiro)
+  const janela = abaFonte === 'janela';
+  $('#audio-rotulo').textContent = t(janela ? 'Window audio' : 'PC audio');
+  $('#audio-desc').textContent = t(janela ? 'only the sound of this window — not the rest of your PC' : "games, videos, music — Herald's own sounds stay out");
   const itens = listaFontes.filter((f) => f.tipo === abaFonte);
   $('#lista-fontes').innerHTML = itens.length
     ? itens
@@ -1717,7 +1863,7 @@ $('#btn-iniciar-tela').onclick = () => iniciarTela();
 async function iniciarTela() {
   if (!fonteEscolhida) return;
   $('#dlg-tela').close();
-  const ok = await chamada.iniciarTela(fonteEscolhida, qualidadeEscolhida, $('#com-audio').checked);
+  const ok = await chamada.iniciarTela(fonteEscolhida, qualidadeEscolhida, $('#com-audio').checked, fonteEscolhida.startsWith('window:'));
   if (!ok) aviso(t('Could not capture this screen.'));
   else if (est.vista !== 'voz') {
     est.vozVista = voz.canalId;
@@ -1814,6 +1960,17 @@ $('#btn-config').onclick = async () => {
   sb?.auth.getUser().then(({ data }) => ($('#perfil-email').value = data?.user?.email || ''));
   window.herald?.versao?.().then((v) => ($('#config-versao').textContent = `Herald ${v}`));
   $('#perfil-avatar').outerHTML = avatarHtml(est.eu.id, 'grande').replace('class="avatar ', 'id="perfil-avatar" class="avatar ');
+  if (sb && !DEMO) {
+    sb.rpc('is_ceo').then(({ data }) => {
+      ehCeo = Boolean(data);
+      $('#menu-herald').hidden = !ehCeo;
+      if (ehCeo) carregarCodigoDia();
+    });
+  } else if (DEMO) {
+    $('#menu-herald').hidden = false;
+    $('#codigo-dia').textContent = 'K7XQ4M9P';
+    $('#codigo-dia-info').textContent = t('New people need this code to create an account. It changes every day at {time}.', { time: '00:00' });
+  }
   seletorIdioma.definir(IDIOMAS.map((i) => ({ valor: i.id, rotulo: i.nome, bandeira: i.bandeira })), idiomaAtual());
   if (!voz.micStream) {
     try { await chamada.abrirMicrofone(); } catch {}
@@ -2064,28 +2221,20 @@ $('#btn-salvar-perfil').onclick = async () => {
   render();
 };
 
-// Foto: reduz pra 256px antes de enviar (fica leve)
-$('#perfil-arquivo').onchange = async (e) => {
-  const arquivo = e.target.files[0];
-  e.target.value = '';
-  if (!arquivo) return;
-  if (arquivo.size > 8 * 1024 * 1024) return aviso(t('Image must be under 2 MB.'));
-  const img = await createImageBitmap(arquivo);
-  const lado = Math.min(img.width, img.height);
-  const canvas = new OffscreenCanvas(256, 256);
-  canvas.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, 256, 256);
-  const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.9 });
-  const caminho = `${est.eu.id}/avatar-${Date.now()}.webp`;
-  const { error } = await sb.storage.from('avatars').upload(caminho, blob, { contentType: 'image/webp', upsert: true });
-  if (error) return aviso(traduzirErro(error));
-  const url = sb.storage.from('avatars').getPublicUrl(caminho).data.publicUrl;
-  const { data, error: erro2 } = await sb.from('profiles').update({ avatar_url: url }).eq('id', est.eu.id).select().single();
-  if (erro2) return aviso(traduzirErro(erro2));
-  est.eu = data;
-  est.perfis.set(data.id, data);
-  $('#perfil-avatar').outerHTML = avatarHtml(est.eu.id, 'grande').replace('class="avatar ', 'id="perfil-avatar" class="avatar ');
-  aviso(t('Saved!'));
-  render();
+// Página "Herald" (só CEO): código do dia pra quem vai criar conta
+let ehCeo = false;
+async function carregarCodigoDia() {
+  const { data, error } = await sb.rpc('codigo_do_dia');
+  if (error || !data) return;
+  $('#codigo-dia').textContent = data.codigo;
+  const muda = new Date(data.muda_em);
+  $('#codigo-dia-info').textContent = t('New people need this code to create an account. It changes every day at {time}.', {
+    time: muda.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  });
+}
+$('#btn-copiar-codigo').onclick = async () => {
+  await navigator.clipboard.writeText($('#codigo-dia').textContent);
+  aviso(t('Copied!'));
 };
 
 $('#btn-sair-conta').onclick = async () => {

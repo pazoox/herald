@@ -3,6 +3,41 @@
 
 export const NOVIDADES = [
   {
+    versao: '1.6.0',
+    en: {
+      novas: [
+        'Turn people up to 200%: right-click someone and push the volume past 100%.',
+        'Right-click a stream to control its sound: volume up to 200% and mute.',
+        'Share just one window\'s sound: pick a window and Herald sends only that app\'s audio, not your whole PC.',
+        'Radio: hide the pop-up and keep listening. Right-click the Radio ring for pause, skip and more. The video now plays clean, without buttons or captions.',
+        'Tools moved to the bottom bar, next to Share screen.',
+        'Side panel: click a ring to open it, the arrow closes it, and clicking anywhere else closes it too. Hover a ring to see what it shows.',
+        'Refreshed look: new user card, softer dividers and tooltips that never get cut off.',
+        'Safer Herald: new accounts need an access code, people who leave a Nest can no longer join its calls, and every name is unique.',
+      ],
+      correcoes: [
+        'Profile photos and Nest icons are off for now. Ready-made avatars are on the way.',
+        'The Radio panel now opens with the same slide as the other tabs.',
+      ],
+    },
+    pt: {
+      novas: [
+        'Aumente as pessoas até 200%: clique com o botão direito em alguém e passe o volume dos 100%.',
+        'Botão direito numa transmissão controla o som dela: volume até 200% e mudo.',
+        'Som só da janela: ao compartilhar uma janela, o Herald manda só o som daquele programa, não o do PC inteiro.',
+        'Rádio: esconda o pop-up e continue ouvindo. Botão direito no anel do Rádio tem pausar, pular e mais. O vídeo agora roda limpo, sem botões nem legendas.',
+        'O Tools foi pra barra de baixo, ao lado do Share screen.',
+        'Painel lateral: clique num anel pra abrir, a setinha fecha, e clicar em qualquer outro lugar fecha também. Passe o mouse num anel pra ver o que ele mostra.',
+        'Visual renovado: cartão do usuário novo, divisórias mais suaves e dicas que nunca ficam cortadas.',
+        'Herald mais seguro: contas novas precisam de um código de acesso, quem sai de um Nest não entra mais nas calls dele e cada nome é único.',
+      ],
+      correcoes: [
+        'Fotos de perfil e ícones de Nest estão desligados por enquanto. Avatares prontos estão a caminho.',
+        'O painel do Rádio agora abre com o mesmo deslize das outras abas.',
+      ],
+    },
+  },
+  {
     versao: '1.5.0',
     en: {
       novas: [

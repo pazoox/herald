@@ -130,13 +130,13 @@ select option { background: var(--panel); }
 .nest-botao.novo:hover { background: var(--accent); color: var(--accent-ink); }
 .trilho .vao { flex: 1; }
 [data-tip] { position: relative; }
-[data-tip]::after {
-  content: attr(data-tip); position: absolute; background: var(--panel-3); color: var(--text); font: 600 12px var(--sans);
-  padding: 5px 10px; border-radius: 8px; white-space: pre; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 80;
+/* Dica (tooltip): um balão só, por cima de tudo, posicionado pelo app pra nunca sair da janela */
+.dica-flutuante {
+  position: fixed; left: 0; top: 0; z-index: 1000; max-width: 280px; padding: 5px 10px; border-radius: 8px;
+  background: var(--panel-3); color: var(--text); font: 600 12px var(--sans); white-space: pre-line; pointer-events: none;
+  box-shadow: 0 8px 24px #0008; opacity: 0; transition: opacity .12s;
 }
-[data-tip]:hover::after { opacity: 1; }
-.trilho [data-tip]::after { left: 58px; top: 50%; transform: translateY(-50%); }
-.doca [data-tip]::after { bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); }
+.dica-flutuante.visivel { opacity: 1; }
 
 /* Avatares */
 .avatar {
@@ -156,7 +156,14 @@ select option { background: var(--panel); }
 }
 
 /* Canais */
-.canais { display: flex; flex-direction: column; min-height: 0; background: #100e16; border-right: 1px solid var(--line); }
+.canais { position: relative; z-index: 2; display: flex; flex-direction: column; min-height: 0; background: #100e16; }
+/* divisória sem linha: uma sombra suave que some em cima e embaixo */
+.canais::after {
+  content: ''; position: absolute; top: 0; bottom: 0; right: -22px; width: 22px; pointer-events: none;
+  background: linear-gradient(to right, #00000047, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+}
 .canais.vazio { visibility: hidden; }
 .nest-topo { position: relative; display: flex; align-items: center; gap: 8px; padding: 18px 12px 12px 18px; font-weight: 800; font-size: 15px; }
 .nest-topo #nest-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -196,23 +203,40 @@ select option { background: var(--panel); }
 .vp-marcas svg.i { width: 14px; height: 14px; }
 .tag-vivo { background: var(--danger); color: #fff; font: 800 9px var(--sans); letter-spacing: .6px; padding: 2px 5px; border-radius: 5px; }
 
-.painel-voz { display: flex; align-items: center; gap: 4px; padding: 10px 10px 10px 14px; border-top: 1px solid var(--line); }
-.pv-info { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
-.pv-status { color: var(--lima); font-weight: 800; font-size: 13px; }
-.pv-onde { color: var(--text-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.pv-onde:hover { color: var(--text-2); text-decoration: underline; }
-.painel-usuario { display: flex; align-items: center; gap: 2px; padding: 10px 8px 10px 10px; background: #0d0b12; }
-.painel-usuario .avatar { width: 34px; height: 34px; font-size: 13px; margin-right: 4px; }
+/* Cartão do usuário (canto de baixo): um cartão flutuante; na call ganha a faixa da call em cima */
+.cartao-eu { margin: 8px 10px 10px; border-radius: 18px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; transition: box-shadow .2s; }
+.cartao-eu.na-call { box-shadow: inset 0 0 0 1px #d6f36a33; }
+.ce-call {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; text-align: left;
+  background: #d6f36a12; border-bottom: 1px solid #d6f36a22; transition: background .15s;
+}
+.ce-call:hover { background: #d6f36a1f; }
+.ce-call[hidden] { display: none; }
+.ce-pulso { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--lima); flex-shrink: 0; }
+.ce-pulso::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--lima); opacity: 0; animation: pulso-call 1.8s ease-out infinite; }
+@keyframes pulso-call { 0% { transform: scale(.5); opacity: .8; } 100% { transform: scale(1.6); opacity: 0; } }
+.ce-call.ao-vivo .ce-pulso, .ce-call.ao-vivo .ce-pulso::after { background: var(--danger); border-color: var(--danger); }
+.ce-onde { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; }
+.ce-onde b { font-weight: 800; font-size: 13px; color: var(--lima); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ce-onde small { font-size: 11.5px; font-weight: 600; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ce-ping { font: 700 11px var(--mono); color: var(--text-3); flex-shrink: 0; }
+.ce-ping[data-nivel="bom"] { color: var(--lima); }
+.ce-ping[data-nivel="medio"] { color: var(--orange); }
+.ce-ping[data-nivel="ruim"] { color: var(--danger); }
+.ce-perfil { display: flex; align-items: center; gap: 2px; padding: 9px 8px 9px 10px; }
+.ce-perfil .avatar { width: 34px; height: 34px; font-size: 13px; margin-right: 6px; }
 .pu-info { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .pu-info #eu-nome { font-weight: 800; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pu-sub { color: var(--text-3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.painel-usuario .botao-icone { width: 32px; height: 32px; }
-.painel-usuario .botao-icone svg.i { width: 18px; height: 18px; }
+.pu-sub { color: var(--text-3); font-size: 11.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pu-sub[data-estado="ativo"] { color: var(--lima); }
+.pu-sub[data-estado="mudo"] { color: var(--danger); }
+.ce-perfil .botao-icone { width: 32px; height: 32px; }
+.ce-perfil .botao-icone svg.i { width: 18px; height: 18px; }
 
 /* Conteúdo */
 .conteudo { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .vista { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.vista-topo { display: flex; align-items: center; gap: 8px; padding: 18px 24px 14px; font-weight: 800; font-size: 15px; border-bottom: 1px solid var(--line); }
+.vista-topo { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 18px 24px 14px; font-weight: 800; font-size: 15px; }
 .vt-icone { color: var(--text-3); display: grid; }
 .sem-nests { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; gap: 4px; }
 .sem-nests h2 { margin: 6px 0 0; font-size: 24px; font-weight: 800; }
@@ -360,6 +384,10 @@ select option { background: var(--panel); }
 .perfil-linha { display: flex; align-items: center; gap: 16px; }
 .perfil-foto { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; font-size: 11.5px; font-weight: 700; color: var(--accent); }
 .perfil-foto:hover .avatar { filter: brightness(1.15); }
+.perfil-foto.sem-troca { cursor: default; color: var(--text-3); }
+.perfil-foto.sem-troca:hover .avatar { filter: none; }
+.codigo-dia { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.codigo-dia code { flex: 1; padding: 12px 16px; border-radius: 12px; background: var(--panel-2); font: 800 22px/1 ui-monospace, Consolas, monospace; letter-spacing: 6px; color: var(--accent); user-select: all; }
 .fontes { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 8px 28px 16px; overflow-y: auto; min-height: 200px; }
 .fonte { background: var(--panel); border-radius: 18px; padding: 8px; text-align: left; display: flex; flex-direction: column; gap: 8px; box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .12s, background .12s; }
 .fonte:hover { background: var(--panel-2); }
@@ -477,8 +505,9 @@ select option { background: var(--panel); }
 .menu-pessoa > button.perigo:hover { background: var(--danger); color: #fff; }
 
 /* ---------- Ferramentas do canal ---------- */
-.vista-topo .ferramentas { position: relative; margin-left: auto; }
-.menu-ferramentas { left: auto; right: 0; top: 44px; width: 260px; }
+.doca .ferramentas { position: relative; }
+/* abre para cima, centralizado no botão da doca */
+.menu-ferramentas { left: 50%; right: auto; top: auto; bottom: calc(100% + 10px); transform: translateX(-50%); width: 260px; }
 .menu-ferramentas button { align-items: flex-start; }
 .menu-ferramentas button svg.i { margin-top: 2px; }
 .menu-ferramentas b { display: block; font-weight: 800; color: var(--text); }
@@ -759,9 +788,10 @@ select option { background: var(--panel); }
 .lateral-aberto { display: none; flex-direction: column; flex: 1; min-height: 0; width: 292px; padding: 0 12px; }
 #app.lateral-aberta .lateral-aberto { display: flex; }
 .lateral-topo { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
-.lateral-abas { margin: 0; flex: 1; }
-.lateral-abas button { flex: 1; padding: 7px 10px; font-size: 12.5px; }
-.lateral-abas #contagem-membros { color: inherit; opacity: .7; }
+.lateral-nome { flex: 1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-3); }
+.lateral-nome [hidden] { display: none; }
+.lateral-nome #contagem-membros { margin-left: 4px; }
+.lateral-recolher { margin-left: -4px; }
 .membros[hidden], .sistema[hidden] { display: none; }
 
 /* aba Sistema */
@@ -830,8 +860,7 @@ body:not(.lateral-aberta) .radio:not([style*="left"]) { right: 84px; }
 .anel.tocando .anel-centro > [data-icone] { display: none; }
 
 /* painel aberto: título dos membros e aba Rádio */
-.lateral-titulo-membros { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-3); margin: 6px 8px 0; }
-.lateral-titulo-membros[hidden], .painel-radio[hidden] { display: none; }
+.painel-radio[hidden] { display: none; }
 .painel-radio { flex: 1; min-height: 0; }
 /* o Rádio encaixado na aba (é o mesmo player, só muda de lugar — a música não reinicia) */
 .radio.no-painel {
@@ -907,3 +936,40 @@ body:not(.lateral-aberta) .radio:not([style*="left"]) { right: 84px; }
 .anel.entrando .anel-centro { animation-name: anel-entra-centro; }
 @keyframes anel-entra-centro { from { transform: translateX(-50%) scale(.4); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 @keyframes anel-traca { from { stroke-dashoffset: 119.4; } }
+
+/* Rádio encaixado: mesma animação da gaveta (sem a transição de posição do pop-up) */
+.radio.no-painel { transition: none; }
+.radio.no-painel.desliza { animation: radio-desliza .22s cubic-bezier(.3, .7, .2, 1); }
+.radio.no-painel.aparece { animation: radio-aparece .18s ease; }
+@keyframes radio-desliza { from { transform: translateX(280px); } to { transform: none; } }
+@keyframes radio-aparece { from { opacity: 0; } to { opacity: 1; } }
+
+/* volume da pessoa acima de 100% (até 200%): número e trilha em verde-limão + marquinha no 100% */
+#mp-vol-valor.acima-100 { color: var(--lima); }
+#mp-vol.acima-100 { accent-color: var(--lima); }
+.mp-bloco:has(#mp-vol) { position: relative; }
+.mp-bloco:has(#mp-vol)::after { content: ''; position: absolute; left: 50%; bottom: 3px; width: 2px; height: 6px; border-radius: 1px; background: var(--text-3); opacity: .6; pointer-events: none; }
+
+/* volume da transmissão: mesmo visual do volume das pessoas (verde acima de 100%, marquinha no 100%) */
+#mt-vol-valor.acima-100 { color: var(--lima); }
+#mt-vol.acima-100 { accent-color: var(--lima); }
+.mp-bloco:has(#mt-vol) { position: relative; }
+.mp-bloco:has(#mt-vol)::after { content: ''; position: absolute; left: 50%; bottom: 3px; width: 2px; height: 6px; border-radius: 1px; background: var(--text-3); opacity: .6; pointer-events: none; }
+.mp-bloco.mudo { opacity: .4; }
+
+/* Rádio escondido: continua tocando, só sai da tela (o anel da trilha mostra que está tocando) */
+.radio.escondido:not(.no-painel) {
+  left: -10000px !important; right: auto !important; top: 0 !important; bottom: auto !important;
+  opacity: 0; pointer-events: none; animation: none;
+}
+.radio.no-painel #radio-esconder { display: none; }
+
+/* vídeo do Rádio só rolando: o player não recebe o mouse, então o YouTube não mostra título, botões e logo ao passar o mouse (os controles são os do Herald) */
+.radio-tela iframe { pointer-events: none; }
+.radio-tela { cursor: default; }
+
+/* barra de cima (onde ficam minimizar/fechar): logo e nome, como no Rexie */
+.barra-titulo { display: flex; align-items: center; gap: 8px; padding-left: 14px; pointer-events: none; }
+.barra-titulo { pointer-events: auto; }
+.barra-titulo img { width: 18px; height: 18px; image-rendering: pixelated; }
+.barra-titulo span { font: 600 12px var(--sans); color: var(--text-2); letter-spacing: .2px; }
