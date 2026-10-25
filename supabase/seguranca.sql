@@ -91,11 +91,14 @@ $$;
 revoke execute on function public.codigo_valido(text) from public, anon, authenticated;
 grant execute on function public.codigo_valido(text) to service_role;
 
--- trava no próprio banco: conta só nasce pela função do servidor (que marca o "ok")
+-- trava no próprio banco: conta só nasce com o código do dia junto.
+-- (O serviço de login grava o app_metadata DEPOIS de inserir a conta, então a trava confere o
+--  user_metadata, que já chega na inserção: a função do servidor manda o código em "herald_codigo".)
 create or replace function public.so_contas_liberadas()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if coalesce(new.raw_app_meta_data ->> 'herald_ok', '') <> 'true' then
+  if coalesce(new.raw_app_meta_data ->> 'herald_ok', '') <> 'true'
+     and not codigo_valido(new.raw_user_meta_data ->> 'herald_codigo') then
     raise exception 'sign-ups are closed';
   end if;
   return new;

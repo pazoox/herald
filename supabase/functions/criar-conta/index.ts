@@ -60,13 +60,15 @@ Deno.serve(async (req) => {
     email,
     password: senha,
     email_confirm: true,
-    user_metadata: { display_name: nome },
+    // o código vai junto: a trava do banco confere ele na hora em que a conta é inserida
+    user_metadata: { display_name: nome, herald_codigo: codigo.toUpperCase() },
     app_metadata: { herald_ok: true },
   });
   if (error) {
     const m = error.message || '';
     if (/already|registered|exists/i.test(m)) return resposta({ erro: 'email-taken' }, 409);
     if (/password/i.test(m)) return resposta({ erro: 'password-short' }, 400);
+    console.error('criar-conta:', m); // aparece nos logs da função
     return resposta({ erro: 'server' }, 500);
   }
   return resposta({ ok: true });
