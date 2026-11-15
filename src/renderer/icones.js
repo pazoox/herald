@@ -34,6 +34,7 @@ const CAMINHOS = {
   recolher: '<path d="m18 15-6-6-6 6"/>',
   expandir: '<path d="m6 9 6 6 6-6"/>',
   'seta-direita': '<path d="m9 6 6 6-6 6"/>',
+  martelo: '<path d="m14 13-7.5 7.5a2.1 2.1 0 0 1-3-3L11 10M16 16l6-6M8 8l6-6M9 7l8 8M21 11l-8-8"/>',
   atividade: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
   esconder: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M7 9l3 3-3 3"/>',
   painel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',

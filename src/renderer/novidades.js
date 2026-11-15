@@ -3,6 +3,33 @@
 
 export const NOVIDADES = [
   {
+    versao: '1.8.0',
+    en: {
+      novas: [
+        'Court ⚖️ is here (Tools → Court): pick someone in the call and an effect, and everyone votes Yes or No. If most say Yes, the effect lasts 30 seconds.',
+        '11 effects: helium voice, monster, robot, underwater, sent to the back, lag behind, make funnier (ba-dum-tss!), censor beep, silence, loser cap and the Shame Room.',
+        'Try to escape: whoever gets punished has one shot at a 15-second mini-game to break free, and the rest of the call watches it live.',
+        'Pop-ups now open centered on the activity area instead of the whole window.',
+      ],
+      correcoes: [
+        'The voice channel list no longer misses people who are in the call.',
+        'Signing up with the access code works again.',
+      ],
+    },
+    pt: {
+      novas: [
+        'Chegou o Court ⚖️ (Tools → Court): escolha alguém da call e um efeito, e todo mundo vota Yes ou No. Se a maioria disser Yes, o efeito dura 30 segundos.',
+        '11 efeitos: voz de hélio, monstro, robô, debaixo d\'água, lá pro fundo, com lag, mais engraçado (ba-dum-tss!), censura com piii, silêncio, boné de loser e a Shame Room.',
+        'Tente escapar: quem levou a punição tem uma chance num mini-game de 15 segundos pra se livrar, e o resto da call assiste ao vivo.',
+        'Os pop-ups agora abrem centralizados na área de atividade, e não na janela inteira.',
+      ],
+      correcoes: [
+        'A lista do canal de voz não deixa mais de mostrar quem está na call.',
+        'O cadastro com o código de acesso voltou a funcionar.',
+      ],
+    },
+  },
+  {
     versao: '1.7.0',
     en: {
       novas: [

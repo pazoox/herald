@@ -513,6 +513,8 @@ function ligarSala(canalId, chave, turn, sinal) {
   acoes.roleta.onMessage = (dados, { peerId }) => avisar('roleta', { ...dados, de: voz.participantes.get(peerId)?.userId });
   acoes.radio = sala.makeAction('radio');
   acoes.radio.onMessage = (dados, { peerId }) => avisar('radio', { estado: dados, de: voz.participantes.get(peerId)?.userId });
+  acoes.court = sala.makeAction('court');
+  acoes.court.onMessage = (dados, { peerId }) => avisar('court', { ...dados, de: voz.participantes.get(peerId)?.userId, peerId });
 
   sala.onPeerJoin = (id) => {
     voz.participantes.set(id, {
@@ -576,6 +578,7 @@ function ligarSala(canalId, chave, turn, sinal) {
     if (novoUser) {
       p.volume = Number(ler('herald-vol-' + p.userId) ?? 1);
       aplicarMudoDe(p);
+      if (efeitosVoz.has(p.userId)) aplicarEfeitoDe(p);
     }
     if (!p.aoVivo) {
       p.assistindo = false;
@@ -610,6 +613,8 @@ export async function sair() {
   sala = null;
   acoes = {};
   chaveAtual = null;
+  efeitosVoz.clear();
+  voz.isolado = false;
   voz.participantes.clear();
   voz.espectadores.clear();
   preferenciasTela.clear();
@@ -672,8 +677,217 @@ export function definirMudoLocal(userId, mudo) {
   avisar('participantes');
 }
 function aplicarMudoDe(p) {
-  const mudo = voz.surdo || (p.userId && mudoLocal(p.userId));
+  const efeito = p.userId && efeitosVoz.get(p.userId);
+  // Court: "silence" e "Shame Room" calam a pessoa pra todo mundo; quem está na Shame Room não ouve ninguém
+  const mudo = voz.surdo || (p.userId && mudoLocal(p.userId)) || efeito === 'silencio' || efeito === 'vergonha' || voz.isolado;
   if (p.ganhoVoz) p.ganhoVoz.gain.setTargetAtTime(mudo ? 0 : p.volume, p.ganhoVoz.context.currentTime, 0.02);
+}
+
+// ---- Court: efeitos na voz de alguém, aplicados em quem ESCUTA (não depende do PC do alvo) ----
+const efeitosVoz = new Map(); // userId -> id do efeito (court.js); os que mexem no som estão em EFEITOS_DE_SOM
+const EFEITOS_DE_SOM = new Set(['helium', 'monster', 'underwater', 'censura', 'robo', 'longe', 'atraso', 'engracado']);
+let tomCarregado = null;
+const carregarTom = (ctx) => (tomCarregado ??= ctx.audioWorklet.addModule('dist/audio/tom.js'));
+
+function montarEfeito(ctx, tipo) {
+  const nos = [];
+  const no = (n) => (nos.push(n), n);
+  const entrada = no(new GainNode(ctx));
+  const saida = no(new GainNode(ctx));
+  if (tipo === 'helium' || tipo === 'monster') {
+    const tom = no(new AudioWorkletNode(ctx, 'tom', { channelCount: 1, channelCountMode: 'explicit', outputChannelCount: [1] }));
+    tom.parameters.get('razao').value = tipo === 'helium' ? 1.65 : 0.62;
+    if (tipo === 'monster') {
+      const grave = no(new BiquadFilterNode(ctx, { type: 'lowshelf', frequency: 220, gain: 6 }));
+      entrada.connect(tom).connect(grave).connect(saida);
+    } else {
+      entrada.connect(tom).connect(saida);
+    }
+  } else if (tipo === 'underwater') {
+    // abafado e ondulando: passa-baixa com a frequência balançando devagar
+    const filtro = no(new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 480, Q: 7 }));
+    const onda = no(new OscillatorNode(ctx, { frequency: 2.6 }));
+    const profundidade = no(new GainNode(ctx, { gain: 260 }));
+    onda.connect(profundidade).connect(filtro.frequency);
+    onda.start();
+    entrada.connect(filtro).connect(no(new GainNode(ctx, { gain: 1.6 }))).connect(saida);
+  } else if (tipo === 'censura') {
+    // a voz some; no lugar, o "piiii" da TV acompanhando o volume de quando a pessoa fala
+    const piii = no(new OscillatorNode(ctx, { type: 'sine', frequency: 1000 }));
+    const porta = no(new GainNode(ctx, { gain: 0 }));
+    const abs = no(new WaveShaperNode(ctx, { curve: Float32Array.from({ length: 1025 }, (_, i) => Math.abs(i / 512 - 1)) }));
+    const envelope = no(new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 12 }));
+    const sobe = no(new GainNode(ctx, { gain: 30 }));
+    const teto = no(new WaveShaperNode(ctx, { curve: Float32Array.from({ length: 1025 }, (_, i) => Math.max(0, Math.min(1, i / 512 - 1)) * 0.22) }));
+    entrada.connect(abs).connect(envelope).connect(sobe).connect(teto).connect(porta.gain);
+    piii.connect(porta).connect(saida);
+    piii.start();
+  } else if (tipo === 'robo') {
+    // voz de robô: modulação em anel (voz × onda de 50 Hz) com um eco metálico curtinho
+    const anel = no(new GainNode(ctx, { gain: 0 }));
+    const onda = no(new OscillatorNode(ctx, { type: 'sine', frequency: 50 }));
+    onda.connect(anel.gain);
+    onda.start();
+    const lata = no(new DelayNode(ctx, { delayTime: 0.007 }));
+    const volta = no(new GainNode(ctx, { gain: 0.55 }));
+    entrada.connect(anel);
+    anel.connect(lata).connect(volta).connect(lata);
+    const mix = no(new GainNode(ctx, { gain: 1.4 }));
+    anel.connect(mix);
+    lata.connect(mix);
+    mix.connect(saida);
+  } else if (tipo === 'longe') {
+    // lá no fundo: fino, baixinho e com eco de sala vazia
+    const fino = no(new BiquadFilterNode(ctx, { type: 'bandpass', frequency: 1100, Q: 0.8 }));
+    const baixo = no(new GainNode(ctx, { gain: 0.3 }));
+    const eco = no(new DelayNode(ctx, { delayTime: 0.22 }));
+    const volta = no(new GainNode(ctx, { gain: 0.45 }));
+    const abafa = no(new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 1400 }));
+    entrada.connect(fino).connect(baixo).connect(saida);
+    baixo.connect(eco).connect(abafa).connect(volta).connect(eco);
+    abafa.connect(saida);
+  } else if (tipo === 'atraso') {
+    // chega 1 segundo atrasado
+    entrada.connect(no(new DelayNode(ctx, { delayTime: 1, maxDelayTime: 2 }))).connect(saida);
+  } else if (tipo === 'engracado') {
+    // a voz passa normal; quando a pessoa termina de falar, toca um "ba-dum-tss" ou um trombone triste
+    entrada.connect(saida);
+    const ouvido = no(new AnalyserNode(ctx, { fftSize: 1024 }));
+    entrada.connect(ouvido);
+    const buf = new Float32Array(1024);
+    let falando = 0;
+    let calado = 0;
+    let espera = 0;
+    const relogio = setInterval(() => {
+      ouvido.getFloatTimeDomainData(buf);
+      let soma = 0;
+      for (const v of buf) soma += v * v;
+      const rms = Math.sqrt(soma / buf.length);
+      espera = Math.max(0, espera - 0.05);
+      if (rms > 0.02) { falando += 0.05; calado = 0; }
+      else if (falando > 0) calado += 0.05;
+      if (falando >= 0.8 && calado >= 0.6 && espera <= 0) {
+        piada(ctx, saida, Math.random() < 0.6 ? 'badum' : 'trombone');
+        espera = 4;
+        falando = 0;
+      }
+      if (calado > 1.5) falando = 0;
+    }, 50);
+    nos.push({ disconnect() { clearInterval(relogio); } });
+  }
+  return {
+    entrada,
+    saida,
+    parar() {
+      for (const n of nos) {
+        try { n.stop?.(); } catch {}
+        n.disconnect();
+      }
+    },
+  };
+}
+
+// sons de comédia, sintetizados na hora (sem arquivo)
+function piada(ctx, destino, tipo) {
+  const t0 = ctx.currentTime + 0.05;
+  const saida = new GainNode(ctx, { gain: 0.5 });
+  saida.connect(destino);
+  const ruido = (dur) => {
+    const b = new AudioBuffer({ length: Math.ceil(ctx.sampleRate * dur), sampleRate: ctx.sampleRate });
+    const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return new AudioBufferSourceNode(ctx, { buffer: b });
+  };
+  const env = (g, t, pico, dur) => {
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(pico, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  };
+  if (tipo === 'badum') {
+    // ba (caixa) - dum (bumbo) - tss (prato)
+    for (const [t, freq] of [[t0, 220], [t0 + 0.16, 180]]) {
+      const tambor = new OscillatorNode(ctx, { type: 'triangle', frequency: freq });
+      tambor.frequency.exponentialRampToValueAtTime(freq * 0.5, t + 0.15);
+      const g = new GainNode(ctx);
+      env(g, t, 0.9, 0.18);
+      tambor.connect(g).connect(saida);
+      tambor.start(t);
+      tambor.stop(t + 0.2);
+      const r = ruido(0.15);
+      const rg = new GainNode(ctx);
+      env(rg, t, 0.35, 0.12);
+      r.connect(new BiquadFilterNode(ctx, { type: 'highpass', frequency: 1500 })).connect(rg).connect(saida);
+      r.start(t);
+    }
+    const bumbo = new OscillatorNode(ctx, { type: 'sine', frequency: 120 });
+    bumbo.frequency.exponentialRampToValueAtTime(45, t0 + 0.45);
+    const bg = new GainNode(ctx);
+    env(bg, t0 + 0.32, 1, 0.35);
+    bumbo.connect(bg).connect(saida);
+    bumbo.start(t0 + 0.32);
+    bumbo.stop(t0 + 0.7);
+    const prato = ruido(1.2);
+    const pg = new GainNode(ctx);
+    env(pg, t0 + 0.32, 0.4, 1.1);
+    prato.connect(new BiquadFilterNode(ctx, { type: 'highpass', frequency: 6000 })).connect(pg).connect(saida);
+    prato.start(t0 + 0.32);
+  } else {
+    // "wah wah wah waaaah"
+    const notas = [[293.7, 0.35], [277.2, 0.35], [261.6, 0.35], [246.9, 1.1]];
+    let t = t0;
+    for (const [f, dur] of notas) {
+      const o = new OscillatorNode(ctx, { type: 'sawtooth', frequency: f });
+      const vib = new OscillatorNode(ctx, { frequency: 5.5 });
+      const vg = new GainNode(ctx, { gain: dur > 1 ? 6 : 2 });
+      vib.connect(vg).connect(o.frequency);
+      const filtro = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 900, Q: 4 });
+      filtro.frequency.setValueAtTime(500, t);
+      filtro.frequency.linearRampToValueAtTime(1300, t + 0.12);
+      filtro.frequency.linearRampToValueAtTime(600, t + dur);
+      const g = new GainNode(ctx);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.35, t + 0.04);
+      g.gain.setValueAtTime(0.35, t + dur - 0.08);
+      g.gain.linearRampToValueAtTime(0, t + dur);
+      o.connect(filtro).connect(g).connect(saida);
+      o.start(t);
+      vib.start(t);
+      o.stop(t + dur + 0.02);
+      vib.stop(t + dur + 0.02);
+      t += dur;
+    }
+  }
+  setTimeout(() => saida.disconnect(), 3000);
+}
+
+async function aplicarEfeitoDe(p) {
+  if (!p.fonteVoz || !p.ganhoVoz) return;
+  const tipo = p.userId && efeitosVoz.get(p.userId);
+  if (EFEITOS_DE_SOM.has(tipo) && (tipo === 'helium' || tipo === 'monster')) await carregarTom(p.ganhoVoz.context);
+  if (!p.fonteVoz || !p.ganhoVoz || (p.userId && efeitosVoz.get(p.userId)) !== tipo) return; // mudou no meio
+  p.efeito?.parar();
+  p.efeito = null;
+  p.fonteVoz.disconnect();
+  if (EFEITOS_DE_SOM.has(tipo)) {
+    p.efeito = montarEfeito(p.ganhoVoz.context, tipo);
+    p.fonteVoz.connect(p.efeito.entrada);
+    p.efeito.saida.connect(p.ganhoVoz);
+  } else {
+    p.fonteVoz.connect(p.ganhoVoz);
+  }
+  aplicarMudoDe(p);
+}
+
+export function definirEfeitoVoz(userId, tipo) {
+  if (tipo) efeitosVoz.set(userId, tipo);
+  else efeitosVoz.delete(userId);
+  for (const p of voz.participantes.values()) if (p.userId === userId) aplicarEfeitoDe(p);
+}
+
+// Eu fui pra Shame Room: não ouço ninguém até sair
+export function definirIsolado(isolado) {
+  voz.isolado = isolado;
+  for (const p of voz.participantes.values()) aplicarMudoDe(p);
 }
 
 // ---- Mixer das vozes ----
@@ -699,7 +913,10 @@ function ligarVozNoMixer(p, stream) {
     p.ganhoVoz = new GainNode(m.ctx, { gain: 0 });
     p.ganhoVoz.connect(m.mestre);
   }
+  p.efeito?.parar();
+  p.efeito = null;
   p.fonteVoz.connect(p.ganhoVoz);
+  if (p.userId && efeitosVoz.has(p.userId)) aplicarEfeitoDe(p);
 }
 // ---- Som das transmissões (também passa pelo mixer: até 200% e mutar) ----
 const sonsTela = new Map(); // userId -> { faixa, fonte, ganho }
@@ -763,6 +980,8 @@ export function ligarSomDaMinhaTela(ligado) {
 }
 
 function soltarVoz(p) {
+  p.efeito?.parar();
+  p.efeito = null;
   p.fonteVoz?.disconnect();
   p.ganhoVoz?.disconnect();
   p.fonteVoz = null;
@@ -895,6 +1114,11 @@ export function pararTela() {
 // Roleta: manda o giro pra todo mundo da chamada (cada um anima igual a partir da semente)
 export function enviarRoleta(giro) {
   acoes.roleta?.send(giro);
+}
+
+// Court: votações e efeitos (pra todos, ou só pra quem acabou de chegar)
+export function enviarCourt(msg, peerId) {
+  acoes.court?.send(msg, peerId ? { target: peerId } : undefined);
 }
 
 // Rádio: manda o estado (fila, pausado, posição) pra todos ou só pra quem acabou de chegar

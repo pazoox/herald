@@ -10,6 +10,7 @@ import * as chamada from './voz.js';
 import { criarSeletor } from './seletor.js';
 import { criarRoleta } from './roleta.js';
 import { criarRadio } from './radio.js';
+import { criarCourt } from './court.js';
 import { novidadesEntre } from './novidades.js';
 import { criarPainelSistema } from './sistema.js';
 
@@ -56,6 +57,8 @@ const est = {
   falando: new Set(), // userIds
 };
 const canaisRealtime = new Map(); // nestId -> RealtimeChannel (presença)
+let court = null; // Court ⚖️ (criado junto com as outras ferramentas, mais embaixo)
+const seloCourt = (userId) => court?.selo(userId) || '';
 let conviteDepois = null; // código recebido antes de logar
 
 function guardar(k, v) { try { localStorage.setItem(k, v); } catch {} }
@@ -685,14 +688,18 @@ function renderCanais() {
       html += `<div class="canal ${ativo ? 'ligado' : ''} ${est.naoLidas.has(c.id) ? 'nao-lida' : ''} ${voz.canalId === c.id ? 'conectado' : ''}" data-canal="${c.id}">
         ${icone(tipo === 'text' ? 'hash' : 'volume')}<span class="canal-nome">${esc(c.name)}</span></div>`;
       if (tipo === 'voice') {
-        const pessoas = [...presenca.entries()].filter(([, p]) => p.voz === c.id);
-        if (pessoas.length) {
-          html += '<div class="voz-pessoas">';
-          for (const [userId, p] of pessoas) {
-            const marcas = [p.aoVivo ? `<span class="tag-vivo">${esc(t('LIVE'))}</span>` : '', userId !== est.eu.id && chamada.mudoLocal(userId) ? `<span class="mudo-local">${icone('som-off')}</span>` : '', p.surdo ? icone('fone-off') : p.mudo ? icone('mic-off') : ''].join('');
-            html += `<div class="voz-pessoa" data-usuario="${userId}">${avatarHtml(userId, 'mini')}<span>${esc(nomeDe(userId))}</span><span class="vp-marcas">${marcas}</span></div>`;
-          }
-          html += '</div>';
+        const todas = [...presenca.entries()].filter(([, p]) => p.voz === c.id);
+        // Court: quem está na Shame Room sai da lista do canal e aparece no canal da vergonha logo abaixo
+        const naVergonha = voz.canalId === c.id ? todas.filter(([id]) => court?.penaDe(id)?.efeito === 'vergonha') : [];
+        const pessoas = todas.filter((x) => !naVergonha.includes(x));
+        const linha = (userId, p) => {
+          const marcas = [seloCourt(userId), p.aoVivo ? `<span class="tag-vivo">${esc(t('LIVE'))}</span>` : '', userId !== est.eu.id && chamada.mudoLocal(userId) ? `<span class="mudo-local">${icone('som-off')}</span>` : '', p.surdo ? icone('fone-off') : p.mudo ? icone('mic-off') : ''].join('');
+          return `<div class="voz-pessoa" data-usuario="${userId}">${avatarHtml(userId, 'mini')}<span>${esc(nomeDe(userId))}</span><span class="vp-marcas">${marcas}</span></div>`;
+        };
+        if (pessoas.length) html += `<div class="voz-pessoas">${pessoas.map(([id, p]) => linha(id, p)).join('')}</div>`;
+        if (naVergonha.length) {
+          html += `<div class="canal canal-vergonha"><span class="emoji">🚪</span><span class="canal-nome">${esc(t('Shame Room'))}</span></div>`;
+          html += `<div class="voz-pessoas">${naVergonha.map(([id, p]) => linha(id, p)).join('')}</div>`;
         }
       }
     }
@@ -1139,7 +1146,12 @@ chamada.aoMudar((tipo, dados) => {
   if (tipo === 'aviso-tela' && dados === 'janela-sem-som') return aviso(t("Couldn't capture only this window's sound — sharing your PC audio instead"));
   if (tipo === 'calibracao') return $('#dlg-config').open && renderCalibracao();
   if (tipo === 'radio') return radio.receber(dados);
-  if (tipo === 'chegou') return radio.chegou(dados);
+  if (tipo === 'court') return court.receber(dados);
+  if (tipo === 'chegou') {
+    court.chegou(dados);
+    return radio.chegou(dados);
+  }
+  if (tipo === 'conexao' && !voz.conectado) court.sair();
   if (tipo === 'eu') radio.atualizarSom();
   if (tipo === 'conexao' && !voz.conectado) radio.desligar();
   if (tipo === 'conexao' && abaLateral === 'radio') aplicarLateral();
@@ -1250,15 +1262,17 @@ function textoPing(d) {
 }
 
 function atualizarCartao(el, d) {
-  el.className = d.conectando ? 'cartao-pessoa conectando' : 'cartao-pessoa';
+  const pena = court?.penaDe(d.userId);
+  el.className = `cartao-pessoa${d.conectando ? ' conectando' : ''}${pena?.efeito === 'vergonha' ? ' na-vergonha' : ''}`;
   el.dataset.fala = d.userId;
   if (d.conectando) el.dataset.tip = t('connecting…');
   else delete el.dataset.tip;
   const marcas = (!d.ehEu && chamada.mudoLocal(d.userId) ? icone('som-off') : '') || (d.surdo ? icone('fone-off') : d.mudo ? icone('mic-off') : '');
   const html = `${d.aoVivo ? `<span class="etiqueta-vivo">${esc(t('LIVE'))}</span>` : ''}
-    ${avatarHtml(d.userId)}
+    ${pena?.efeito === 'loser' ? `<div class="com-bone">${avatarHtml(d.userId)}<span class="bone">🧢</span><span class="bone-txt">LOSER</span></div>` : avatarHtml(d.userId)}
     <div class="nome">${esc(nomeDe(d.userId))}${d.ehEu ? ` <span class="voce">(${esc(t('you'))})</span>` : ''}</div>
     ${textoPing(d)}
+    ${pena ? `<div class="court-no-cartao">${seloCourt(d.userId)}${pena.efeito === 'vergonha' ? `<span>🚪 ${esc(t('Shame Room'))}</span>` : ''}</div>` : ''}
     ${marcas ? `<div class="marcas"><span class="marca">${marcas}</span></div>` : ''}
     ${d.aoVivo && d.peerId && !d.assistindo ? `<div class="assistir"><button class="botao-assistir" data-assistir="${d.peerId}">${icone('olho')}${esc(t('Watch'))}</button></div>` : ''}`;
   if (el.dataset.html !== html) {
@@ -1364,13 +1378,45 @@ const radio = criarRadio({
   buscar: (texto) => window.herald.radioBuscar(texto),
 });
 
+// Pop-ups das ferramentas centralizam na área de atividade (o meio do app), não na janela inteira:
+// guarda o centro e a largura dessa área em variáveis do CSS e atualiza quando ela muda de tamanho
+{
+  const area = $('.conteudo');
+  const medir = () => {
+    const r = area.getBoundingClientRect();
+    const raiz = document.documentElement.style;
+    raiz.setProperty('--ativ-x', `${Math.round(r.left + r.width / 2)}px`);
+    raiz.setProperty('--ativ-y', `${Math.round(r.top + r.height / 2)}px`);
+    raiz.setProperty('--ativ-w', `${Math.round(r.width)}px`);
+  };
+  new ResizeObserver(medir).observe(area);
+  window.addEventListener('resize', medir);
+}
+
+court = criarCourt({
+  eu: () => est.eu.id,
+  pessoas: pessoasDaChamada,
+  nomeDe,
+  avatarHtml: (id) => avatarHtml(id),
+  enviar: (msg, peerId) => chamada.enviarCourt(msg, peerId),
+  aplicarEfeito: (userId, efeito) => chamada.definirEfeitoVoz(userId, efeito),
+  isolar: (isolado) => chamada.definirIsolado(isolado),
+  aviso,
+  atualizar: () => {
+    renderCanais();
+    if (est.vista === 'voz') renderPalco();
+  },
+  demo: new URLSearchParams(location.search).has('demo'),
+});
+
 $('#btn-ferramentas').onclick = (e) => {
   e.stopPropagation();
   const menu = $('#menu-ferramentas');
   const naChamada = voz.conectado && voz.canalId === est.vozVista;
   menu.innerHTML = `
     <button data-ferramenta="roleta" ${naChamada ? '' : 'disabled'}>${icone('roleta')}<span><b>${esc(t('Roulette'))}</b><small>${esc(t(naChamada ? 'Pick people at random' : 'Join the voice channel first'))}</small></span></button>
-    <button data-ferramenta="radio" ${naChamada ? '' : 'disabled'}>${icone('radio')}<span><b>${esc(t('Radio'))}</b><small>${esc(t(!naChamada ? 'Join the voice channel first' : radio.tocandoAlgo() ? 'Playing now' : 'Listen to music together'))}</small></span></button>`;
+    <button data-ferramenta="radio" ${naChamada ? '' : 'disabled'}>${icone('radio')}<span><b>${esc(t('Radio'))}</b><small>${esc(t(!naChamada ? 'Join the voice channel first' : radio.tocandoAlgo() ? 'Playing now' : 'Listen to music together'))}</small></span></button>
+    <button data-ferramenta="court" ${naChamada ? '' : 'disabled'}>${icone('martelo')}<span><b>Court</b><small>${esc(t(naChamada ? 'Let the call vote on someone' : 'Join the voice channel first'))}</small></span></button>`;
   menu.hidden = !menu.hidden;
 };
 $('#menu-ferramentas').onclick = (e) => {
@@ -1379,6 +1425,7 @@ $('#menu-ferramentas').onclick = (e) => {
   $('#menu-ferramentas').hidden = true;
   if (b.dataset.ferramenta === 'roleta') roleta.abrir();
   if (b.dataset.ferramenta === 'radio') radio.abrir();
+  if (b.dataset.ferramenta === 'court') court.abrir();
 };
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.ferramentas')) $('#menu-ferramentas').hidden = true;
