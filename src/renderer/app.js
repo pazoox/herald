@@ -470,11 +470,25 @@ function anunciarPresenca() {
     for (const [nestId, ch] of canaisRealtime) ch.track(meuEstadoPresenca(nestId));
   }, 120);
 }
+// Reavisa de tempos em tempos: se a conexão com o Supabase oscilou e o meu aviso se perdeu,
+// eu volto a aparecer pros outros sozinho (a voz continua de PC pra PC mesmo sem isso)
+setInterval(() => {
+  if (est.eu && canaisRealtime.size) anunciarPresenca();
+}, 30000);
 
-// Presença do Nest com o meu estado local por cima (aparece na hora, sem esperar o servidor)
+// Presença do Nest com o meu estado local por cima (aparece na hora, sem esperar o servidor).
+// Na call em que eu estou, quem está conectado comigo de verdade (PC a PC) conta mesmo que o
+// aviso dele pelo Supabase tenha se perdido — é a fonte que não erra.
 function presencaDe(nestId) {
   const mapa = new Map(est.presenca.get(nestId) || []);
   if (est.eu) mapa.set(est.eu.id, meuEstadoPresenca(nestId));
+  const minhaCall = voz.conectado && (est.canais.get(nestId) || []).some((c) => c.id === voz.canalId);
+  if (minhaCall) {
+    for (const p of voz.participantes.values()) {
+      if (!p.userId || p.userId === est.eu?.id) continue;
+      mapa.set(p.userId, { ...(mapa.get(p.userId) || {}), voz: voz.canalId, mudo: p.mudo, surdo: p.surdo, aoVivo: p.aoVivo });
+    }
+  }
   return mapa;
 }
 
@@ -1132,6 +1146,7 @@ chamada.aoMudar((tipo, dados) => {
   if (tipo === 'eu' || tipo === 'conexao') anunciarPresenca();
   renderUsuario();
   renderCanais();
+  if (tipo === 'participantes' || tipo === 'conexao') renderMembros();
   if (est.vista === 'voz') renderPalco();
 });
 
